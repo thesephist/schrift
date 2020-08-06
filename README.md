@@ -16,6 +16,8 @@ Design & requirements
 - Compile-time lexical name binding and undefined name resolution
 - Bytecode compiler + VM
 - Efficient composite types backed by a growable array + hashmap combination
+- Use ARC instead of tracing GC, different perf characteristics, better memory efficiency, better suited to Rust
+    - Is `Rc<T>` appropriate here at all? Or do we need our own ARC impl
 
 APIs
 

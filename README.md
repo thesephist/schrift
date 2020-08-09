@@ -23,4 +23,5 @@ APIs
 
 - Raw TCP/IP + FS APIs modeled after POSIX syscalls + userspace polyfills for higher level builtins
 - Keep current concurrency model, but support `create()` / `join()` / `send()` threading with message passing (outlined in Ink spec in main repository)
-
+- `exit()` syscall, better APIs around file descriptors so we can do things like connect pipes between child processes of `exec()`
+- In general, we should try to reduce number of syscalls the runtime needs to make, and expose APIs for Ink programs to also minimize their syscall counts

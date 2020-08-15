@@ -25,3 +25,6 @@ APIs
 - Keep current concurrency model, but support `create()` / `join()` / `send()` threading with message passing (outlined in Ink spec in main repository)
 - `exit()` syscall, better APIs around file descriptors so we can do things like connect pipes between child processes of `exec()`
 - In general, we should try to reduce number of syscalls the runtime needs to make, and expose APIs for Ink programs to also minimize their syscall counts
+- Syscalls should expose a generic interface for interfacing with memory-mapped hardware (?)
+    - I want to be able to run Ink on a microcontroller or Raspberry Pi and control hardware peripherals like servos and LEDs directly
+

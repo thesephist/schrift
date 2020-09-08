@@ -1,4 +1,6 @@
 1.31 + 2/(a + b :: {
-	c -> d,
+	`` also a comment
+	c -> 'Hello, World!'
+	` this is a comment `
 	e -> f => doThing?()
 })

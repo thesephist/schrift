@@ -71,6 +71,7 @@ impl fmt::Display for Tok<'_> {
 #[derive(Debug)]
 pub enum LexError {
     InvalidNumber(String),
+    EOFInString,
 }
 
 // TODO: support producing Spans with line/column info
@@ -97,7 +98,15 @@ impl<'s> Reader<'s> {
             .source
             .chars()
             .nth(self.index)
-            .expect("Reader index out of bounds");
+            .expect("Reader index out of bounds in peek");
+    }
+
+    fn lookback(&self) -> char {
+        return self
+            .source
+            .chars()
+            .nth(self.index - 1)
+            .expect("Reader index out of bounds in lookback");
     }
 
     fn next(&mut self) {
@@ -168,12 +177,38 @@ pub fn tokenize(prog: &str) -> Result<Vec<Tok>, LexError> {
 
         match c {
             '\'' => {
-                println!("start of string");
-                reader.next();
+                reader.next(); // opening quote
+                reader.pop_span();
+
+                let str_content = reader.take_while(|c| c != '\'');
+                let str_value = String::from(str_content);
+                tokens.push(reader.pop_token(TokKind::StringLiteral(str_value)));
+
+                reader.next(); // closing quote
             }
             '`' => {
-                println!("start of comment");
-                reader.next();
+                reader.next(); // opening backtick
+
+                if reader.peek() == '`' {
+                    // line comment
+                    reader.next(); // second backtick
+                    reader.pop_span();
+
+                    let str_content = reader.take_while(|c| c != '\n');
+                    let str_value = String::from(str_content);
+                    tokens.push(reader.pop_token(TokKind::Comment(str_value)));
+
+                    reader.next(); // newline
+                } else {
+                    // block comment
+                    reader.pop_span();
+
+                    let str_content = reader.take_while(|c| c != '`');
+                    let str_value = String::from(str_content);
+                    tokens.push(reader.pop_token(TokKind::Comment(str_value)));
+
+                    reader.next(); // closing backtick
+                }
             }
             '\n' => {
                 ensure_separator(&mut tokens, &mut reader);
@@ -214,7 +249,7 @@ pub fn tokenize(prog: &str) -> Result<Vec<Tok>, LexError> {
                         tokens.push(reader.pop_token_and_next(TokKind::MatchColon));
                     }
                     '=' => {
-                        tokens.push(reader.pop_token_and_next(TokKind::MatchColon));
+                        tokens.push(reader.pop_token_and_next(TokKind::DefineOp));
                     }
                     _ => tokens.push(reader.pop_token_and_next(TokKind::KeyValueSeparator)),
                 }
@@ -249,8 +284,13 @@ pub fn tokenize(prog: &str) -> Result<Vec<Tok>, LexError> {
                 // TODO support full unicode
                 let ident = reader
                     .take_while(|c| c.is_ascii_alphanumeric() || c == '?' || c == '!' || c == '@');
+
                 let ident_bit = String::from(ident);
-                tokens.push(reader.pop_token(TokKind::Ident(ident_bit)));
+                match ident {
+                    "true" => tokens.push(reader.pop_token(TokKind::TrueLiteral)),
+                    "false" => tokens.push(reader.pop_token(TokKind::FalseLiteral)),
+                    _ => tokens.push(reader.pop_token(TokKind::Ident(ident_bit))),
+                }
             }
         }
     }

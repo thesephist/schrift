@@ -59,12 +59,31 @@ pub struct Tok<'s> {
 
 impl fmt::Display for Tok<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{:?} [{}]",
-            self.kind,
-            &self.source[self.span.0..self.span.1]
-        )
+        let pos = self.position();
+        write!(f, "{:?} [{}:{}]", self.kind, pos.line, pos.col,)
+    }
+}
+
+#[derive(Debug)]
+pub struct Position {
+    line: usize,
+    col: usize,
+}
+
+impl<'s> Tok<'s> {
+    fn position(&self) -> Position {
+        // first get to right line
+        let mut line: usize = 1;
+        let mut col: usize = 1;
+        for c in self.source[0..self.span.0].chars() {
+            if c == '\n' {
+                line += 1;
+                col = 0;
+            }
+            col += 1;
+        }
+        // then count columns
+        return Position { line, col };
     }
 }
 
@@ -74,7 +93,6 @@ pub enum LexError {
     EOFInString,
 }
 
-// TODO: support producing Spans with line/column info
 #[derive(Debug)]
 pub struct Reader<'s> {
     source: &'s str,
@@ -146,7 +164,7 @@ impl<'s> Reader<'s> {
     where
         F: Fn(char) -> bool,
     {
-        while cond(self.peek()) {
+        while self.has_next() && (cond(self.peek()) || self.lookback() == '\\') {
             self.next();
         }
         return self.take();

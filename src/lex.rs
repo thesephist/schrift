@@ -1,16 +1,16 @@
 use std::fmt;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum TokKind<'s> {
+pub enum TokKind {
     Separator,
 
-    Comment(&'s str),
+    Comment(String),
 
-    Ident(&'s str),
+    Ident(String),
     EmptyIdent,
 
     NumberLiteral(f64),
-    StringLiteral(&'s str),
+    StringLiteral(String),
 
     TrueLiteral,
     FalseLiteral,
@@ -52,7 +52,7 @@ pub struct Span(usize, usize);
 
 #[derive(Debug, Clone)]
 pub struct Tok<'s> {
-    kind: TokKind<'s>,
+    kind: TokKind,
     span: Span,
     source: &'s str,
 }
@@ -66,6 +66,11 @@ impl fmt::Display for Tok<'_> {
             &self.source[self.span.0..self.span.1]
         )
     }
+}
+
+#[derive(Debug)]
+pub enum LexError {
+    InvalidNumber(String),
 }
 
 // TODO: support producing Spans with line/column info
@@ -111,7 +116,7 @@ impl<'s> Reader<'s> {
         return span;
     }
 
-    fn pop_token(&mut self, kind: TokKind<'s>) -> Tok<'s> {
+    fn pop_token(&mut self, kind: TokKind) -> Tok<'s> {
         return Tok {
             kind: kind,
             span: self.pop_span(),
@@ -119,7 +124,7 @@ impl<'s> Reader<'s> {
         };
     }
 
-    fn pop_token_and_next(&mut self, kind: TokKind<'s>) -> Tok<'s> {
+    fn pop_token_and_next(&mut self, kind: TokKind) -> Tok<'s> {
         self.next();
         return Tok {
             kind: kind,
@@ -143,9 +148,7 @@ impl<'s> Reader<'s> {
     }
 }
 
-pub fn tokenize(prog: &str) -> Vec<Tok> {
-    // TODO: compile error here b/c `tokens` outlives reader,
-    // but data from reader flows into tokens.
+pub fn tokenize(prog: &str) -> Result<Vec<Tok>, LexError> {
     let mut tokens = Vec::<Tok>::new();
     let mut reader = Reader::new(prog);
 
@@ -235,18 +238,22 @@ pub fn tokenize(prog: &str) -> Vec<Tok> {
                 }
             }
             '0'..='9' => {
-                let num = reader.take_while(|c| c >= '0' && c <= '9' || c == '.');
-                // TODO: actually parse the number
-                tokens.push(reader.pop_token(TokKind::NumberLiteral(0.42)));
+                let numeral = reader.take_while(|c| c >= '0' && c <= '9' || c == '.');
+                let r = numeral.parse::<f64>();
+                match r {
+                    Ok(num) => tokens.push(reader.pop_token(TokKind::NumberLiteral(num))),
+                    Err(_) => return Err(LexError::InvalidNumber(String::from(numeral))),
+                }
             }
             _ => {
                 // TODO support full unicode
                 let ident = reader
                     .take_while(|c| c.is_ascii_alphanumeric() || c == '?' || c == '!' || c == '@');
-                tokens.push(reader.pop_token(TokKind::Ident("hi")));
+                let ident_bit = String::from(ident);
+                tokens.push(reader.pop_token(TokKind::Ident(ident_bit)));
             }
         }
     }
 
-    return tokens;
+    return Ok(tokens);
 }

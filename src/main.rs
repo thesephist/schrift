@@ -46,7 +46,12 @@ fn eval_file(path: PathBuf) {
 
 fn eval_string(prog: String) {
     let tokens = lex::tokenize(&prog);
-    for tok in tokens.iter() {
-        println!("{}", tok);
+    match tokens {
+        Ok(ts) => {
+            for tok in ts.iter() {
+                println!("{}", tok);
+            }
+        }
+        Err(e) => eprintln!("{:?}", e),
     }
 }

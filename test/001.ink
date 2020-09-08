@@ -1,3 +1,4 @@
+a + b
 1.31 + 2/(a + b :: {
 	`` also a comment
 	c -> 'Hello, World! with an \' escape'

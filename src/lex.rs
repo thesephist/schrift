@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::err::InkErr;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokKind {
     Separator,
@@ -52,8 +54,8 @@ pub struct Span(usize, usize);
 
 #[derive(Debug, Clone)]
 pub struct Tok<'s> {
-    kind: TokKind,
-    span: Span,
+    pub kind: TokKind,
+    pub span: Span,
     source: &'s str,
 }
 
@@ -85,12 +87,6 @@ impl<'s> Tok<'s> {
         // then count columns
         return Position { line, col };
     }
-}
-
-#[derive(Debug)]
-pub enum LexError {
-    InvalidNumber(String),
-    EOFInString,
 }
 
 #[derive(Debug)]
@@ -175,17 +171,35 @@ impl<'s> Reader<'s> {
     }
 }
 
-pub fn tokenize(prog: &str) -> Result<Vec<Tok>, LexError> {
+pub fn tokenize(prog: &str) -> Result<Vec<Tok>, InkErr> {
     let mut tokens = Vec::<Tok>::new();
     let mut reader = Reader::new(prog);
 
     fn ensure_separator<'s>(tokens: &mut Vec<Tok<'s>>, reader: &mut Reader<'s>) {
         match tokens.last() {
-            Some(tok) => {
-                if tok.kind != TokKind::Separator {
-                    tokens.push(reader.pop_token(TokKind::Separator));
-                }
-            }
+            Some(tok) => match tok.kind {
+                TokKind::Separator
+                | TokKind::Comment(_)
+                | TokKind::LParen
+                | TokKind::LBracket
+                | TokKind::LBrace
+                | TokKind::AddOp
+                | TokKind::SubOp
+                | TokKind::MulOp
+                | TokKind::DivOp
+                | TokKind::ModOp
+                | TokKind::NegOp
+                | TokKind::GtOp
+                | TokKind::LtOp
+                | TokKind::EqOp
+                | TokKind::DefineOp
+                | TokKind::AccessorOp
+                | TokKind::KeyValueSeparator
+                | TokKind::FunctionArrow
+                | TokKind::MatchColon
+                | TokKind::CaseArrow => (),
+                _ => tokens.push(reader.pop_token(TokKind::Separator)),
+            },
             None => return,
         };
     }
@@ -208,6 +222,8 @@ pub fn tokenize(prog: &str) -> Result<Vec<Tok>, LexError> {
                 reader.next(); // opening backtick
 
                 if reader.peek() == '`' {
+                    ensure_separator(&mut tokens, &mut reader);
+
                     // line comment
                     reader.next(); // second backtick
                     reader.pop_span();
@@ -255,11 +271,20 @@ pub fn tokenize(prog: &str) -> Result<Vec<Tok>, LexError> {
             ',' => tokens.push(reader.pop_token_and_next(TokKind::Separator)),
             '.' => tokens.push(reader.pop_token_and_next(TokKind::AccessorOp)),
             '(' => tokens.push(reader.pop_token_and_next(TokKind::LParen)),
-            ')' => tokens.push(reader.pop_token_and_next(TokKind::RParen)),
+            ')' => {
+                ensure_separator(&mut tokens, &mut reader);
+                tokens.push(reader.pop_token_and_next(TokKind::RParen));
+            }
             '[' => tokens.push(reader.pop_token_and_next(TokKind::LBracket)),
-            ']' => tokens.push(reader.pop_token_and_next(TokKind::RBracket)),
+            ']' => {
+                ensure_separator(&mut tokens, &mut reader);
+                tokens.push(reader.pop_token_and_next(TokKind::RBracket));
+            }
             '{' => tokens.push(reader.pop_token_and_next(TokKind::LBrace)),
-            '}' => tokens.push(reader.pop_token_and_next(TokKind::RBrace)),
+            '}' => {
+                ensure_separator(&mut tokens, &mut reader);
+                tokens.push(reader.pop_token_and_next(TokKind::RBrace));
+            }
             ':' => {
                 reader.next();
                 match reader.peek() {
@@ -295,7 +320,7 @@ pub fn tokenize(prog: &str) -> Result<Vec<Tok>, LexError> {
                 let r = numeral.parse::<f64>();
                 match r {
                     Ok(num) => tokens.push(reader.pop_token(TokKind::NumberLiteral(num))),
-                    Err(_) => return Err(LexError::InvalidNumber(String::from(numeral))),
+                    Err(_) => return Err(InkErr::InvalidNumber(String::from(numeral))),
                 }
             }
             _ => {

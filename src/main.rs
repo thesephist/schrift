@@ -54,8 +54,8 @@ fn eval_file(path: PathBuf) -> Result<(), err::InkErr> {
 fn eval_string(prog: String) -> Result<(), err::InkErr> {
     let tokens = lex::tokenize(&prog)?;
     println!(":: Tokens ::");
-    for tok in tokens.iter() {
-        println!("{}", tok);
+    for (i, tok) in tokens.iter().enumerate() {
+        println!("{}  {}", i, tok);
     }
 
     let nodes = parse::parse(tokens)?;

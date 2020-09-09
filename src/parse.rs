@@ -204,17 +204,17 @@ impl<'s> Parser<'s> {
             } else {
                 // Priority is higher than previous ops, so
                 // make it a right-heavy tree branch
-                self.idx += 1;
                 self.guard_eof()?;
 
+                let next_op = self.tokens[self.idx].clone();
+                self.idx += 1;
                 let subtree = self.parse_binary_expr(
                     nodes.pop().unwrap(),
-                    self.tokens[self.idx].clone(),
+                    next_op,
                     ops.last().unwrap().priority(),
                 )?;
 
                 nodes.push(subtree);
-                self.idx += 1;
             }
         }
 

@@ -2,8 +2,10 @@
 pub enum InkErr {
     // lexer errors
     InvalidNumber(String),
-    // EOFInString,
     // parser errors
+    UnexpectedEOF,
+    UnexpectedToken,
+    // UnexpectedStartOfAtom,
     // runtime errors
-    DummyErr,
+    Unimplemented,
 }

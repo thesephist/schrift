@@ -5,4 +5,5 @@ pub enum InkErr {
     // EOFInString,
     // parser errors
     // runtime errors
+    DummyErr,
 }

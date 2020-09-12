@@ -60,7 +60,7 @@ impl Tok<'_> {
             TokKind::AndOp => 20,
             TokKind::XorOp => 15,
             TokKind::OrOp => 10,
-            TokKind::DefineOp => 0,
+            TokKind::DefineOp => 5,
             _ => -1,
         }
     }
@@ -196,11 +196,9 @@ impl<'s> Parser<'s> {
                 // so it's ok to be left-heavy in this tree
                 ops.push(self.tokens[self.idx].clone());
                 self.idx += 1;
-
                 self.guard_eof()?;
 
-                let right = self.parse_atom()?;
-                nodes.push(right);
+                nodes.push(self.parse_atom()?);
             } else {
                 // Priority is higher than previous ops, so
                 // make it a right-heavy tree branch
@@ -241,7 +239,7 @@ impl<'s> Parser<'s> {
     fn parse_atom(&mut self) -> Result<Node, InkErr> {
         self.guard_eof()?;
 
-        let tok = &self.tokens[self.idx].clone();
+        let tok = self.tokens[self.idx].clone();
         self.idx += 1;
 
         if tok.kind == TokKind::NegOp {
@@ -254,35 +252,229 @@ impl<'s> Parser<'s> {
 
         self.guard_eof()?;
 
+        let mut atom: Node;
         match tok.kind.clone() {
             TokKind::NumberLiteral(num) => return Ok(Node::NumberLiteral(num)),
             TokKind::StringLiteral(s) => return Ok(Node::StringLiteral(s)),
             TokKind::TrueLiteral => return Ok(Node::BooleanLiteral(true)),
             TokKind::FalseLiteral => return Ok(Node::BooleanLiteral(false)),
-            TokKind::Ident(_) => {
-                return Err(InkErr::Unimplemented);
+            TokKind::Ident(s) => {
+                if self.tokens[self.idx].kind == TokKind::FunctionArrow {
+                    self.idx -= 1;
+                    atom = self.parse_fn_literal_monadic()?;
+
+                    // parse_atom should not consume trailing Separators, but
+                    // parse_fn_literal does because it ends with expressions.
+                    // so we backtrack one token.
+                    self.idx -= 1;
+                } else {
+                    atom = Node::Ident(String::from(s));
+                }
+                // fallthrough
             }
             TokKind::EmptyIdent => {
-                return Err(InkErr::Unimplemented);
+                if self.tokens[self.idx].kind == TokKind::FunctionArrow {
+                    self.idx -= 1;
+                    atom = self.parse_fn_literal_monadic()?;
+
+                    // parse_atom should not consume trailing Separators, but
+                    // parse_fn_literal does because it ends with expressions.
+                    // so we backtrack one token.
+                    self.idx -= 1;
+                    return Ok(atom);
+                }
+                return Ok(Node::EmptyIdent);
             }
             TokKind::LParen => {
-                return Err(InkErr::Unimplemented);
+                // expression list, or argument list for a function literal
+                let mut exprs = Vec::<Node>::new();
+                let lparen_idx = self.idx - 1;
+                while self.tokens[self.idx].kind != TokKind::RParen {
+                    exprs.push(self.parse_expr()?);
+                    self.guard_eof()?;
+                }
+                self.idx += 1; // RParen
+                self.guard_eof()?;
+
+                if self.tokens[self.idx].kind == TokKind::FunctionArrow {
+                    self.idx = lparen_idx;
+                    atom = self.parse_fn_literal_variadic()?;
+
+                    // parse_atom should not consume trailing Separators, but
+                    // parse_fn_literal does because it ends with expressions.
+                    // so we backtrack one token.
+                    self.idx -= 1;
+                } else {
+                    atom = Node::ExprList(exprs);
+                }
+                // fallthrough
             }
             TokKind::LBrace => {
-                return Err(InkErr::Unimplemented);
+                let mut entries = Vec::<Node>::new();
+                while self.tokens[self.idx].kind != TokKind::RBrace {
+                    let key_expr = self.parse_expr()?;
+                    self.guard_eof()?;
+
+                    if self.tokens[self.idx].kind == TokKind::KeyValueSeparator {
+                        self.idx += 1; // KeyValueSeparator
+                    } else {
+                        return Err(InkErr::ExpectedCompositeValue);
+                    }
+
+                    self.guard_eof()?;
+
+                    let val_expr = self.parse_expr()?;
+
+                    // Separator after val_expr is consumed by parse_expr
+                    entries.push(Node::ObjectEntry {
+                        key: Box::new(key_expr),
+                        val: Box::new(val_expr),
+                    });
+
+                    self.guard_eof()?;
+                }
+                self.idx += 1; // RBrace
+
+                return Ok(Node::ObjectLiteral(entries));
             }
             TokKind::LBracket => {
-                return Err(InkErr::Unimplemented);
+                let mut items = Vec::<Node>::new();
+                while self.tokens[self.idx].kind != TokKind::RBracket {
+                    items.push(self.parse_expr()?);
+                    self.guard_eof()?;
+                }
+                self.idx += 1; // RBracket
+
+                return Ok(Node::ListLiteral(items));
             }
-            _ => (),
+            _ => return Err(InkErr::Unimplemented),
         }
 
-        // TODO: parse FnCall
+        // bounds check here because parse_expr may have consumed all tokens before this
+        while self.idx < self.tokens.len() && self.tokens[self.idx].kind == TokKind::LParen {
+            atom = self.parse_fn_call(atom)?;
+            self.guard_eof()?;
+        }
 
-        return Err(InkErr::Unimplemented);
+        return Ok(atom);
     }
 
-    fn parse_match_body(&self) -> Result<Vec<Node>, InkErr> {
-        return Err(InkErr::Unimplemented);
+    fn parse_match_body(&mut self) -> Result<Vec<Node>, InkErr> {
+        self.idx += 1; // LBrace
+        let mut clauses = Vec::<Node>::new();
+
+        self.guard_eof()?;
+
+        while self.tokens[self.idx].kind != TokKind::RBrace {
+            clauses.push(self.parse_match_clause()?);
+            self.guard_eof()?;
+        }
+        self.idx += 1; // RBrace
+
+        return Ok(clauses);
+    }
+
+    fn parse_match_clause(&mut self) -> Result<Node, InkErr> {
+        let atom = self.parse_atom()?;
+        self.guard_eof()?;
+
+        if self.tokens[self.idx].kind != TokKind::CaseArrow {
+            return Err(InkErr::ExpectedMatchCaseArrow);
+        }
+        self.idx += 1; // CaseArrow
+        self.guard_eof()?;
+
+        let expr = self.parse_expr()?;
+
+        return Ok(Node::MatchClause {
+            target: Box::new(atom),
+            expr: Box::new(expr),
+        });
+    }
+
+    fn parse_fn_literal_monadic(&mut self) -> Result<Node, InkErr> {
+        let mut args = Vec::<Node>::new();
+
+        let kind = &self.tokens[self.idx].kind;
+        match kind {
+            TokKind::Ident(s) => args.push(Node::Ident(s.clone())),
+            TokKind::EmptyIdent => args.push(Node::EmptyIdent),
+            _ => return Err(InkErr::UnexpectedArgument),
+        }
+        self.idx += 1; // [Empty]Ident
+        self.guard_eof()?;
+
+        if self.tokens[self.idx].kind != TokKind::FunctionArrow {
+            return Err(InkErr::UnexpectedToken);
+        }
+        self.idx += 1; // FunctionArrow
+
+        let body = self.parse_expr()?;
+
+        return Ok(Node::FnLiteral {
+            args: args,
+            body: Box::new(body),
+        });
+    }
+
+    fn parse_fn_literal_variadic(&mut self) -> Result<Node, InkErr> {
+        self.idx += 1; // LParen
+
+        let mut args = Vec::<Node>::new();
+        while self.tokens[self.idx].kind != TokKind::RParen {
+            let kind = &self.tokens[self.idx].kind;
+            match kind {
+                TokKind::Ident(s) => args.push(Node::Ident(s.clone())),
+                TokKind::EmptyIdent => args.push(Node::EmptyIdent),
+                _ => return Err(InkErr::UnexpectedArgument),
+            }
+            self.idx += 1; // [Empty]Ident
+            self.guard_eof()?;
+
+            if self.tokens[self.idx].kind != TokKind::Separator {
+                return Err(InkErr::UnexpectedToken);
+            }
+
+            self.idx += 1; // Separator
+
+            // guard_eof not necessary here because a file always ends with Separator
+        }
+        self.guard_eof()?;
+
+        if self.tokens[self.idx].kind != TokKind::RParen {
+            return Err(InkErr::UnexpectedToken);
+        }
+        self.idx += 1; // RParen
+        self.guard_eof()?;
+
+        if self.tokens[self.idx].kind != TokKind::FunctionArrow {
+            return Err(InkErr::UnexpectedToken);
+        }
+        self.idx += 1; // FunctionArrow
+
+        let body = self.parse_expr()?;
+
+        return Ok(Node::FnLiteral {
+            args: args,
+            body: Box::new(body),
+        });
+    }
+
+    fn parse_fn_call(&mut self, func: Node) -> Result<Node, InkErr> {
+        self.idx += 1; // LParen
+        self.guard_eof()?;
+
+        let mut args = Vec::<Node>::new();
+
+        while self.tokens[self.idx].kind != TokKind::RParen {
+            args.push(self.parse_expr()?);
+            self.guard_eof()?;
+        }
+        self.idx += 1; // RParen
+
+        return Ok(Node::FnCall {
+            func: Box::new(func),
+            args: args,
+        });
     }
 }

@@ -5,6 +5,9 @@ pub enum InkErr {
     // parser errors
     UnexpectedEOF,
     UnexpectedToken,
+    ExpectedCompositeValue,
+    ExpectedMatchCaseArrow,
+    UnexpectedArgument,
     // UnexpectedStartOfAtom,
     // runtime errors
     Unimplemented,

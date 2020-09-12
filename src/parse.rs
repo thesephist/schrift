@@ -1,7 +1,6 @@
 use crate::err::InkErr;
 use crate::lex::{Tok, TokKind};
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Node {
     UnaryExpr {

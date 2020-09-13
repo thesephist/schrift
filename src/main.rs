@@ -3,8 +3,10 @@ use std::path::PathBuf;
 
 mod args;
 mod err;
+mod gen;
 mod lex;
 mod parse;
+mod vm;
 
 const INK_VERSION: &str = "0.1.7";
 
@@ -53,16 +55,23 @@ fn eval_file(path: PathBuf) -> Result<(), err::InkErr> {
 
 fn eval_string(prog: String) -> Result<(), err::InkErr> {
     let tokens = lex::tokenize(&prog)?;
-    println!(":: Tokens ::");
-    for (i, tok) in tokens.iter().enumerate() {
-        println!("{}  {}", i, tok);
-    }
+    // println!(":: Tokens ::");
+    // for (i, tok) in tokens.iter().enumerate() {
+    //     println!("{}  {}", i, tok);
+    // }
 
     let nodes = parse::parse(tokens)?;
-    println!(":: AST nodes ::");
-    for node in nodes.iter() {
-        println!("{:?}", node);
-    }
+    // println!(":: AST nodes ::");
+    // for node in nodes.iter() {
+    //     println!("{:?}", node);
+    // }
 
-    return Ok(());
+    let insts = gen::generate(nodes)?;
+    // println!(":: Instructions ::");
+    // for inst in insts.iter() {
+    //     println!("{:?}", inst);
+    // }
+
+    let mut machine = vm::Vm::new(insts);
+    return machine.run();
 }

@@ -38,6 +38,8 @@ impl Val {
 pub enum Op {
     Nop,
 
+    Mov(Reg),
+
     LoadArg(usize),
     LoadConst(usize),
     LoadBind(usize),
@@ -49,6 +51,13 @@ pub enum Op {
     MakeComp,
     SetComp(Reg, Reg, Reg),
     GetComp(Reg, Reg),
+
+    Neg(Reg),
+    Add(Reg, Reg),
+    Sub(Reg, Reg),
+    Mul(Reg, Reg),
+    Div(Reg, Reg),
+    Mod(Reg, Reg),
 }
 
 #[derive(Debug, Clone)]
@@ -93,9 +102,62 @@ impl Block {
         return self.consts.len() - 1;
     }
 
-    fn generate_node(&mut self, node: &Node) -> Result<(), InkErr> {
-        match node {
-            Node::EmptyIdent => (),
+    // returns the register at which the result of evaluating `node`
+    // is stored, after executing all generated code for the given node.
+    fn generate_node(&mut self, node: &Node) -> Result<Reg, InkErr> {
+        let result_reg = match node {
+            Node::UnaryExpr { op, arg } => {
+                let arg_reg = self.generate_node(&arg)?;
+                let dest = self.iota();
+                self.code.push(Inst {
+                    dest,
+                    op: Op::Neg(arg_reg),
+                });
+                dest
+            }
+            Node::BinaryExpr { op, left, right } => {
+                let left_reg = self.generate_node(&left)?;
+                let right_reg = self.generate_node(&right)?;
+                let dest = self.iota();
+                self.code.push(Inst {
+                    dest,
+                    // TODO: make this not always an add
+                    op: Op::Add(left_reg, right_reg),
+                });
+                dest
+            }
+            Node::FnCall { func, args } => {
+                let func_reg = self.generate_node(&func)?;
+                // TODO: how do we encode fn args in bytecode?
+                let dest = self.iota();
+                self.code.push(Inst {
+                    dest,
+                    op: Op::Call(func_reg),
+                });
+                dest
+            }
+            Node::MatchExpr { cond, clauses } => {
+                // TODO: must produce block per clause
+                self.iota()
+            }
+            Node::ExprList(exprs) => {
+                // TODO: must produce another block!
+                self.iota()
+            }
+            Node::EmptyIdent => {
+                let dest = self.iota();
+                self.code.push(Inst { dest, op: Op::Nop });
+                dest
+            }
+            Node::Ident(name) => {
+                let decl_reg = 0; // TODO: load from local declaration register
+                let dest = self.iota();
+                self.code.push(Inst {
+                    dest,
+                    op: Op::Mov(decl_reg),
+                });
+                dest
+            }
             Node::NumberLiteral(n) => {
                 let dest = self.iota();
                 let const_dest = self.push_const(Val::Number(n.clone()));
@@ -103,6 +165,7 @@ impl Block {
                     dest,
                     op: Op::LoadConst(const_dest),
                 });
+                dest
             }
             Node::StringLiteral(s) => {
                 let dest = self.iota();
@@ -111,6 +174,7 @@ impl Block {
                     dest,
                     op: Op::LoadConst(const_dest),
                 });
+                dest
             }
             Node::BooleanLiteral(b) => {
                 let dest = self.iota();
@@ -119,13 +183,65 @@ impl Block {
                     dest,
                     op: Op::LoadConst(const_dest),
                 });
+                dest
+            }
+            Node::ObjectLiteral(entries) => {
+                let dest = self.iota();
+                self.code.push(Inst {
+                    dest,
+                    op: Op::MakeComp,
+                });
+                for entry in entries.iter() {
+                    match entry {
+                        Node::ObjectEntry { key, val } => {
+                            let key_reg = self.generate_node(key)?;
+                            let val_reg = self.generate_node(val)?;
+                            let entry_dest = self.iota();
+                            self.code.push(Inst {
+                                dest: entry_dest,
+                                op: Op::SetComp(dest, key_reg, val_reg),
+                            });
+                        }
+                        _ => panic!("unreachable!"),
+                    }
+                }
+                dest
+            }
+            Node::ListLiteral(items) => {
+                let dest = self.iota();
+                self.code.push(Inst {
+                    dest,
+                    op: Op::MakeComp,
+                });
+                for (i, item) in items.iter().enumerate() {
+                    let index_dest = self.iota();
+                    let index_reg = self.push_const(Val::Number(i as f64));
+                    self.code.push(Inst {
+                        dest: index_dest,
+                        op: Op::LoadConst(index_reg),
+                    });
+
+                    let item_reg = self.generate_node(item)?;
+                    let item_dest = self.iota();
+                    self.code.push(Inst {
+                        dest: item_dest,
+                        op: Op::SetComp(dest, index_dest, item_reg),
+                    });
+                }
+                dest
+            }
+            Node::FnLiteral { args, body } => {
+                // TODO: must produce another block!
+                self.iota()
             }
             _ => {
                 let dest = self.iota();
                 self.code.push(Inst { dest, op: Op::Nop });
+                dest
             }
-        }
-        return Ok(());
+        };
+
+        return Ok(result_reg);
     }
 }
 

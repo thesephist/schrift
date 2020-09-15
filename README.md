@@ -32,24 +32,7 @@ Static analysis in Schrift performs at least the following, for code generation 
 
 - Variable declaration annotation
 - Escape analysis
-- Immutable constant interning
-- Constant/immutable value annotation
-
-### Schrift IR (SSA)
-
-For optimization and compilation, Schrift depends on a simple SSA format. The SSA format is to be specified, and several goals.
-
-- Bind all variable/function names at compile time and error early on ambiguous or undefined variables.
-
-### Optimizations
-
-On the IR, Schrift performs at least the following optimizations.
-
-- Constant propagation
-- Common subexpression elimination
-- Dead branch/code elimination
-- Function call inlining
-- Tail call elimination (unrolling tail recursion into loops)
+- Expression normalization for easier code generation
 
 ### Code generation and bytecode format
 
@@ -57,6 +40,19 @@ The VM's bytecode is a flattened, optimized representation of an Ink program. Th
 
 1. Take advantage of data locality to improve runtime performance.
 2. Enable instruction-level pipelining and parallelism at runtime, as much as possible.
+3. Provide a good format for code optimization
+
+Schrift's bytecode is register-based and designed to be an optimized single static assignment (SSA) form of the Ink AST. Each function and expression list in Ink is compiled to a separate contiguous block of bytecode, called `Block`, to allow for incremental compilation and replacements of parts of a program during interactive evaluation of a program.
+
+### Optimizations
+
+On the bytecode, Schrift performs at least the following optimizations.
+
+- Constant propagation
+- Common subexpression elimination
+- Dead branch/code elimination
+- Function call inlining
+- Tail call elimination (unrolling tail recursion into loops)
 
 ### Schrift virtual machine
 

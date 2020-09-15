@@ -64,6 +64,10 @@ pub struct Block {
     pub binds: Vec<Reg>,
     pub ret: Reg,
     pub code: Vec<Inst>,
+
+    // integer counter to label
+    // pseudo-register allocations.
+    iota: usize,
 }
 
 impl Block {
@@ -74,14 +78,53 @@ impl Block {
             binds: Vec::new(),
             ret: 0,
             code: vec![],
+            iota: 0,
         };
     }
 
+    fn iota(&mut self) -> Reg {
+        let last = self.iota;
+        self.iota += 1;
+        return last;
+    }
+
+    fn push_const(&mut self, val: Val) -> Reg {
+        self.consts.push(val);
+        return self.consts.len() - 1;
+    }
+
     fn generate_node(&mut self, node: &Node) -> Result<(), InkErr> {
-        self.code.push(Inst {
-            dest: 0,
-            op: Op::Nop,
-        });
+        match node {
+            Node::EmptyIdent => (),
+            Node::NumberLiteral(n) => {
+                let dest = self.iota();
+                let const_dest = self.push_const(Val::Number(n.clone()));
+                self.code.push(Inst {
+                    dest,
+                    op: Op::LoadConst(const_dest),
+                });
+            }
+            Node::StringLiteral(s) => {
+                let dest = self.iota();
+                let const_dest = self.push_const(Val::Str(s.clone().into_bytes()));
+                self.code.push(Inst {
+                    dest,
+                    op: Op::LoadConst(const_dest),
+                });
+            }
+            Node::BooleanLiteral(b) => {
+                let dest = self.iota();
+                let const_dest = self.push_const(Val::Bool(b.clone()));
+                self.code.push(Inst {
+                    dest,
+                    op: Op::LoadConst(const_dest),
+                });
+            }
+            _ => {
+                let dest = self.iota();
+                self.code.push(Inst { dest, op: Op::Nop });
+            }
+        }
         return Ok(());
     }
 }

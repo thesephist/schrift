@@ -87,15 +87,13 @@ impl Block {
 }
 
 pub fn generate(nodes: Vec<Node>) -> Result<Vec<Block>, InkErr> {
-    let mut program = Vec::<Block>::new();
-    for node in nodes.iter() {
-        program.extend(vec![generate_block(&node)?]);
-    }
-    return Ok(program);
-}
+    let mut main_block = Block::new();
 
-fn generate_block(node: &Node) -> Result<Block, InkErr> {
-    let mut block = Block::new();
-    block.generate_node(&node)?;
-    return Ok(block);
+    for node in nodes.iter() {
+        main_block.generate_node(&node)?;
+    }
+
+    let mut program = Vec::<Block>::new();
+    program.push(main_block);
+    return Ok(program);
 }

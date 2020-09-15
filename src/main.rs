@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+mod analyze;
 mod args;
 mod err;
 mod gen;
@@ -65,6 +66,8 @@ fn eval_string(prog: String) -> Result<(), err::InkErr> {
     // for node in nodes.iter() {
     //     println!("{:?}", node);
     // }
+
+    analyze::analyze(&nodes)?;
 
     let insts = gen::generate(nodes)?;
     // println!(":: Instructions ::");

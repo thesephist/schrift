@@ -7,6 +7,7 @@ mod err;
 mod gen;
 mod lex;
 mod parse;
+mod runtime;
 mod vm;
 
 const INK_VERSION: &str = "0.1.7";

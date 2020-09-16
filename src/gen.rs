@@ -1,11 +1,15 @@
+use std::fmt;
+
 use crate::err::InkErr;
 use crate::lex::TokKind;
 use crate::parse::Node;
-use std::fmt;
+use crate::runtime;
 
 use std::collections::HashMap;
 
 pub type Reg = usize;
+
+pub type NativeFn = fn(Vec<Val>) -> Result<Val, InkErr>;
 
 #[allow(unused)]
 #[derive(Debug, Clone)]
@@ -17,23 +21,12 @@ pub enum Val {
     Null,
     Comp(HashMap<Vec<u8>, Val>),
     Func(Block),
+    NativeFunc(NativeFn),
 }
 
 #[allow(unused)]
 impl Val {
-    fn to_ink_string(&self) -> String {
-        match &self {
-            Val::Empty => "_".to_string(),
-            Val::Number(n) => format!("{:.8}", n),
-            // TODO: this will fail if not utf8 bytes
-            Val::Str(bytes) => String::from_utf8(bytes.to_vec()).unwrap(),
-            Val::Bool(v) => v.to_string(),
-            Val::Null => "()".to_string(),
-            _ => String::from("(unimplemented)"),
-        }
-    }
-
-    fn eq(&self, other: &Val) -> bool {
+    pub fn eq(&self, other: &Val) -> bool {
         match &self {
             // TODO: implement
             Val::Empty => true,
@@ -53,7 +46,6 @@ pub enum Op {
     LoadBind(usize),
     LoadBlock(usize),
 
-    // TODO: invent a better calling convention
     Call(Reg, Vec<Reg>),
     CallIfEq(Reg, Reg, Reg),
 
@@ -85,7 +77,12 @@ impl fmt::Display for Op {
             Op::LoadConst(idx) => write!(f, "LOAD_CONST {}", idx),
             Op::LoadBind(idx) => write!(f, "LOAD_BIND {}", idx),
             Op::LoadBlock(idx) => write!(f, "LOAD_BLOCK {}", idx),
-            Op::Call(reg, args) => write!(f, "CALL @{}, {:?}", reg, args),
+            Op::Call(reg, args) => write!(
+                f,
+                "CALL @{}, [{:?}]",
+                reg,
+                args.iter().map(|r| format!("@{}", r)).collect::<String>()
+            ),
             Op::CallIfEq(reg, a, b) => write!(f, "CALL @{}, @{} @{}", reg, a, b),
             Op::MakeComp => write!(f, "MAKE_COMP"),
             Op::SetComp(reg, k, v) => write!(f, "SET_COMP @{}, @{} @{}", reg, k, v),
@@ -340,8 +337,28 @@ impl Block {
             Node::Ident(name) => match self.scope_get(name) {
                 Some(reg) => reg.clone(),
                 None => {
-                    println!("Could not find variable {:?} in current scope", name);
-                    return Err(InkErr::UndefinedVariable);
+                    let dest = self.iota();
+                    let const_dest: Reg;
+                    match name.as_str() {
+                        "out" => {
+                            const_dest = self.push_const(Val::NativeFunc(runtime::builtin_out))
+                        }
+                        "char" => {
+                            const_dest = self.push_const(Val::NativeFunc(runtime::builtin_char))
+                        }
+                        "string" => {
+                            const_dest = self.push_const(Val::NativeFunc(runtime::builtin_string))
+                        }
+                        _ => {
+                            println!("Could not find variable {:?} in current scope", name);
+                            return Err(InkErr::UndefinedVariable);
+                        }
+                    }
+                    self.code.push(Inst {
+                        dest,
+                        op: Op::LoadConst(const_dest),
+                    });
+                    dest
                 }
             },
             Node::NumberLiteral(n) => {

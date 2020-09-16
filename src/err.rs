@@ -14,5 +14,10 @@ pub enum InkErr {
     // compiler errors
     InvalidAssignment,
     // runtime errors
+    InvalidOperand,
+    InvalidFunctionCall,
     Unimplemented,
+    InvalidArguments,
+    NotEnoughArguments,
+    IOError,
 }

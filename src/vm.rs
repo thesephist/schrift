@@ -1,6 +1,8 @@
+use std::fmt;
+
 use crate::err::InkErr;
 use crate::gen::{Block, Op, Val};
-use std::fmt;
+use crate::runtime;
 
 #[derive(Debug)]
 pub struct Frame {
@@ -62,20 +64,44 @@ impl Vm {
         self.stack.push(main_frame);
 
         while self.stack.len() > 0 {
-            let mut frame = self.stack.pop().unwrap();
-            frame.regs = vec![Val::Empty; frame.block.slots];
+            let frame = self.stack.last_mut().unwrap();
             for inst in &frame.block.code {
-                // TODO: tail call optimization should be implemented in the VM,
-                // not the compiler. If Op::Call is the last instruction of a Block,
-                // reuse the current stack frame position.
                 let dest = inst.dest;
-                match inst.op {
+                match inst.op.clone() {
                     Op::Nop => (),
                     Op::Mov(reg) => frame.regs[dest] = frame.regs[reg].clone(),
+                    Op::Add(a, b) => {
+                        frame.regs[dest] = runtime::add(&frame.regs[a], &frame.regs[b])?.clone()
+                    }
+                    Op::Call(f_reg, arg_regs) => {
+                        // TODO: tail call optimization should be implemented in the VM,
+                        // not the compiler. If Op::Call is the last instruction of a Block,
+                        // reuse the current stack frame position.
+                        let callee_fn = &frame.regs[f_reg];
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                        match callee_fn {
+                            Val::Func(callee_block) => {
+                                let mut callee_frame = Frame::new(self.bp, callee_block.clone());
+                                for (i, arg_reg) in arg_regs.iter().enumerate() {
+                                    callee_frame.regs[i] = frame.regs[arg_reg.clone()].clone();
+                                }
+                                // TODO: push the stack and restart vm dispatch loop
+                            }
+                            Val::NativeFunc(func) => {
+                                let args = arg_regs
+                                    .iter()
+                                    .map(|reg| frame.regs[reg.clone()].clone())
+                                    .collect();
+                                frame.regs[dest] = func(args)?;
+                            }
+                            _ => return Err(InkErr::InvalidFunctionCall),
+                        }
+                    }
                     Op::LoadConst(idx) => frame.regs[dest] = frame.block.consts[idx].clone(),
                     _ => println!("Unknown instruction {:?}", inst),
                 }
             }
+            self.stack.pop();
         }
 
         return Ok(());

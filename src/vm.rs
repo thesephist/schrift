@@ -1,5 +1,5 @@
 use crate::err::InkErr;
-use crate::gen::{Block, Val};
+use crate::gen::{Block, Op, Val};
 use std::fmt;
 
 #[derive(Debug)]
@@ -62,16 +62,20 @@ impl Vm {
         self.stack.push(main_frame);
 
         while self.stack.len() > 0 {
-            let frame = self.stack.last().unwrap();
+            let mut frame = self.stack.pop().unwrap();
+            frame.regs = vec![Val::Empty; frame.block.slots];
             for inst in &frame.block.code {
                 // TODO: tail call optimization should be implemented in the VM,
                 // not the compiler. If Op::Call is the last instruction of a Block,
                 // reuse the current stack frame position.
-                match inst {
+                let dest = inst.dest;
+                match inst.op {
+                    Op::Nop => (),
+                    Op::Mov(reg) => frame.regs[dest] = frame.regs[reg].clone(),
+                    Op::LoadConst(idx) => frame.regs[dest] = frame.block.consts[idx].clone(),
                     _ => println!("Unknown instruction {:?}", inst),
                 }
             }
-            self.stack.pop();
         }
 
         return Ok(());

@@ -1,4 +1,6 @@
 ` eval test `
+out := _
+string := _
 a := 2
 b := 3
-a + b
+out(string(a + b))

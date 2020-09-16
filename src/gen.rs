@@ -49,12 +49,12 @@ pub enum Op {
 
     Mov(Reg),
 
-    LoadArg(usize),
     LoadConst(usize),
     LoadBind(usize),
     LoadBlock(usize),
 
-    Call(Reg),
+    // TODO: invent a better calling convention
+    Call(Reg, Vec<Reg>),
     CallIfEq(Reg, Reg, Reg),
 
     MakeComp,
@@ -82,11 +82,10 @@ impl fmt::Display for Op {
         match self {
             Op::Nop => write!(f, "NOP"),
             Op::Mov(reg) => write!(f, "= @{}", reg),
-            Op::LoadArg(idx) => write!(f, "LOAD_ARG {}", idx),
             Op::LoadConst(idx) => write!(f, "LOAD_CONST {}", idx),
             Op::LoadBind(idx) => write!(f, "LOAD_BIND {}", idx),
             Op::LoadBlock(idx) => write!(f, "LOAD_BLOCK {}", idx),
-            Op::Call(reg) => write!(f, "CALL @{}", reg),
+            Op::Call(reg, args) => write!(f, "CALL @{}, {:?}", reg, args),
             Op::CallIfEq(reg, a, b) => write!(f, "CALL @{}, @{} @{}", reg, a, b),
             Op::MakeComp => write!(f, "MAKE_COMP"),
             Op::SetComp(reg, k, v) => write!(f, "SET_COMP @{}, @{} @{}", reg, k, v),
@@ -109,8 +108,8 @@ impl fmt::Display for Op {
 
 #[derive(Debug, Clone)]
 pub struct Inst {
-    dest: Reg,
-    op: Op,
+    pub dest: Reg,
+    pub op: Op,
 }
 
 impl fmt::Display for Inst {
@@ -188,6 +187,15 @@ impl Block {
 
     fn scope_insert(&mut self, name: String, reg: Reg) -> Option<Reg> {
         return self.scope.insert(name, reg);
+    }
+
+    fn from_nodes(nodes: Vec<Node>) -> Result<Block, InkErr> {
+        let mut block = Block::new();
+        for node in nodes.iter() {
+            block.generate_node(&node)?;
+        }
+        block.slots = block.code.len();
+        return Ok(block);
     }
 
     // returns the register at which the result of evaluating `node`
@@ -300,13 +308,16 @@ impl Block {
                 }
                 dest
             }
-            Node::FnCall { func, args: _args } => {
+            Node::FnCall { func, args } => {
                 let func_reg = self.generate_node(&func)?;
-                // TODO: how do we encode fn args in bytecode?
+                let mut arg_regs = Vec::new();
+                for arg in args.iter() {
+                    arg_regs.push(self.generate_node(arg)?);
+                }
                 let dest = self.iota();
                 self.code.push(Inst {
                     dest,
-                    op: Op::Call(func_reg),
+                    op: Op::Call(func_reg, arg_regs),
                 });
                 dest
             }
@@ -424,13 +435,6 @@ impl Block {
 }
 
 pub fn generate(nodes: Vec<Node>) -> Result<Vec<Block>, InkErr> {
-    let mut main_block = Block::new();
-
-    for node in nodes.iter() {
-        main_block.generate_node(&node)?;
-    }
-
-    let mut program = Vec::<Block>::new();
-    program.push(main_block);
-    return Ok(program);
+    let main_block = Block::from_nodes(nodes)?;
+    return Ok(vec![main_block]);
 }

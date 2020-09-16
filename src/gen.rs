@@ -4,7 +4,7 @@ use crate::parse::Node;
 
 use std::collections::HashMap;
 
-type Reg = usize;
+pub type Reg = usize;
 
 #[allow(unused)]
 #[derive(Debug, Clone)]
@@ -18,6 +18,7 @@ pub enum Val {
     Func(Block),
 }
 
+#[allow(unused)]
 impl Val {
     fn to_ink_string(&self) -> String {
         match &self {
@@ -115,7 +116,7 @@ impl Block {
     // is stored, after executing all generated code for the given node.
     fn generate_node(&mut self, node: &Node) -> Result<Reg, InkErr> {
         let result_reg = match node {
-            Node::UnaryExpr { op, arg } => {
+            Node::UnaryExpr { op: _, arg } => {
                 let arg_reg = self.generate_node(&arg)?;
                 let dest = self.iota();
                 self.code.push(Inst {
@@ -134,8 +135,8 @@ impl Block {
                 match *(define_left.clone()) {
                     Node::BinaryExpr {
                         op: TokKind::AccessorOp,
-                        left: comp_left,
-                        right: comp_right,
+                        left: _comp_left,
+                        right: _comp_right,
                     } => {
                         let dest = self.iota();
                         self.code.push(Inst {
@@ -161,7 +162,6 @@ impl Block {
                 let left_reg = self.generate_node(&left)?;
                 let right_reg = self.generate_node(&right)?;
                 let dest = self.iota();
-                // TODO: make this not always an add
                 match op {
                     TokKind::AddOp => self.code.push(Inst {
                         dest,
@@ -218,7 +218,7 @@ impl Block {
                 }
                 dest
             }
-            Node::FnCall { func, args } => {
+            Node::FnCall { func, args: _args } => {
                 let func_reg = self.generate_node(&func)?;
                 // TODO: how do we encode fn args in bytecode?
                 let dest = self.iota();
@@ -228,11 +228,14 @@ impl Block {
                 });
                 dest
             }
-            Node::MatchExpr { cond, clauses } => {
+            Node::MatchExpr {
+                cond: _cond,
+                clauses: _clauses,
+            } => {
                 // TODO: must produce block per clause
                 self.iota()
             }
-            Node::ExprList(exprs) => {
+            Node::ExprList(_exprs) => {
                 // TODO: must produce another block!
                 self.iota()
             }
@@ -241,14 +244,12 @@ impl Block {
                 self.code.push(Inst { dest, op: Op::Nop });
                 dest
             }
-            Node::Ident(name) => {
-                // TODO: load from local declaration register annotated on the Node::Ident
-                let decl_reg = 0;
-
+            Node::Ident(_) => {
+                // TODO: generate declaration to register in context
                 let dest = self.iota();
                 self.code.push(Inst {
                     dest,
-                    op: Op::Mov(decl_reg),
+                    op: Op::Mov(0),
                 });
                 dest
             }
@@ -324,7 +325,10 @@ impl Block {
                 }
                 dest
             }
-            Node::FnLiteral { args, body } => {
+            Node::FnLiteral {
+                args: _args,
+                body: _body,
+            } => {
                 // TODO: must produce another block!
                 self.iota()
             }

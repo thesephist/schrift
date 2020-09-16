@@ -61,13 +61,17 @@ fn eval_string(prog: String) -> Result<(), err::InkErr> {
     //     println!("{}  {}", i, tok);
     // }
 
-    let nodes = parse::parse(tokens)?;
+    let mut nodes = parse::parse(tokens)?;
     // println!(":: AST nodes ::");
     // for node in nodes.iter() {
     //     println!("{:?}", node);
     // }
 
-    analyze::analyze(&nodes)?;
+    analyze::analyze(&mut nodes)?;
+    // println!(":: Analyzed AST nodes ::");
+    // for node in nodes.iter() {
+    //     println!("{:?}", node);
+    // }
 
     let insts = gen::generate(nodes)?;
     // println!(":: Instructions ::");

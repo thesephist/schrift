@@ -1,3 +1,4 @@
+#[allow(unused)]
 #[derive(Debug)]
 pub enum InkErr {
     // lexer errors
@@ -8,7 +9,8 @@ pub enum InkErr {
     ExpectedCompositeValue,
     ExpectedMatchCaseArrow,
     UnexpectedArgument,
-    // UnexpectedStartOfAtom,
+    // analyzer errors
+    UndefinedVariable,
     // compiler errors
     InvalidAssignment,
     // runtime errors

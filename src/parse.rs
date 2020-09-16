@@ -267,7 +267,7 @@ impl<'s> Parser<'s> {
                     // so we backtrack one token.
                     self.idx -= 1;
                 } else {
-                    atom = Node::Ident(String::from(s));
+                    atom = Node::Ident(s)
                 }
                 // fallthrough
             }

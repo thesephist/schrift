@@ -9,6 +9,8 @@ pub enum InkErr {
     ExpectedMatchCaseArrow,
     UnexpectedArgument,
     // UnexpectedStartOfAtom,
+    // compiler errors
+    InvalidAssignment,
     // runtime errors
     Unimplemented,
 }

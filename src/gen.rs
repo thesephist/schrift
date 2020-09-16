@@ -1,4 +1,5 @@
 use crate::err::InkErr;
+use crate::lex::TokKind;
 use crate::parse::Node;
 
 use std::collections::HashMap;
@@ -58,6 +59,14 @@ pub enum Op {
     Mul(Reg, Reg),
     Div(Reg, Reg),
     Mod(Reg, Reg),
+
+    Gtr(Reg, Reg),
+    Lss(Reg, Reg),
+    Eql(Reg, Reg),
+
+    And(Reg, Reg),
+    Or(Reg, Reg),
+    Xor(Reg, Reg),
 }
 
 #[derive(Debug, Clone)]
@@ -115,15 +124,98 @@ impl Block {
                 });
                 dest
             }
+            Node::BinaryExpr {
+                op: TokKind::DefineOp,
+                left: define_left,
+                right: define_right,
+            } => {
+                let right_reg = self.generate_node(&define_right)?;
+
+                match *(define_left.clone()) {
+                    Node::BinaryExpr {
+                        op: TokKind::AccessorOp,
+                        left: comp_left,
+                        right: comp_right,
+                    } => {
+                        let dest = self.iota();
+                        self.code.push(Inst {
+                            dest,
+                            // TODO: Op::SetComp for comp register, key register, and right_reg;
+                            op: Op::Nop,
+                        });
+                        right_reg
+                    }
+                    Node::Ident(_) => {
+                        let dest = self.iota();
+                        // TODO: return register allocated by variable declaration
+                        dest
+                    }
+                    Node::EmptyIdent => right_reg,
+                    _ => {
+                        println!("Invalid assignment expression: {:?}", node);
+                        return Err(InkErr::InvalidAssignment);
+                    }
+                }
+            }
             Node::BinaryExpr { op, left, right } => {
                 let left_reg = self.generate_node(&left)?;
                 let right_reg = self.generate_node(&right)?;
                 let dest = self.iota();
-                self.code.push(Inst {
-                    dest,
-                    // TODO: make this not always an add
-                    op: Op::Add(left_reg, right_reg),
-                });
+                // TODO: make this not always an add
+                match op {
+                    TokKind::AddOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Add(left_reg, right_reg),
+                    }),
+                    TokKind::SubOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Sub(left_reg, right_reg),
+                    }),
+                    TokKind::MulOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Mul(left_reg, right_reg),
+                    }),
+                    TokKind::DivOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Div(left_reg, right_reg),
+                    }),
+                    TokKind::ModOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Mod(left_reg, right_reg),
+                    }),
+                    TokKind::GtOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Gtr(left_reg, right_reg),
+                    }),
+                    TokKind::LtOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Lss(left_reg, right_reg),
+                    }),
+                    TokKind::EqOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Eql(left_reg, right_reg),
+                    }),
+                    TokKind::AndOp => self.code.push(Inst {
+                        dest,
+                        op: Op::And(left_reg, right_reg),
+                    }),
+                    TokKind::OrOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Or(left_reg, right_reg),
+                    }),
+                    TokKind::XorOp => self.code.push(Inst {
+                        dest,
+                        op: Op::Xor(left_reg, right_reg),
+                    }),
+                    TokKind::AccessorOp => self.code.push(Inst {
+                        dest,
+                        op: Op::GetComp(left_reg, right_reg),
+                    }),
+                    _ => {
+                        println!("Cannot compile binary op {:?}", op);
+                        return Err(InkErr::Unimplemented);
+                    }
+                }
                 dest
             }
             Node::FnCall { func, args } => {
@@ -150,7 +242,9 @@ impl Block {
                 dest
             }
             Node::Ident(name) => {
-                let decl_reg = 0; // TODO: load from local declaration register
+                // TODO: load from local declaration register annotated on the Node::Ident
+                let decl_reg = 0;
+
                 let dest = self.iota();
                 self.code.push(Inst {
                     dest,

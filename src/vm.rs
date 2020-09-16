@@ -64,6 +64,9 @@ impl Vm {
         while self.stack.len() > 0 {
             let frame = self.stack.last().unwrap();
             for inst in &frame.block.code {
+                // TODO: tail call optimization should be implemented in the VM,
+                // not the compiler. If Op::Call is the last instruction of a Block,
+                // reuse the current stack frame position.
                 match inst {
                     _ => println!("Unknown instruction {:?}", inst),
                 }

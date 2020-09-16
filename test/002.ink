@@ -1,3 +1,4 @@
 ` eval test `
-n := 2
-1 + n
+a := 2
+b := 3
+a + b

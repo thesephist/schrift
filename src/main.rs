@@ -73,12 +73,12 @@ fn eval_string(prog: String) -> Result<(), err::InkErr> {
     //     println!("{:?}", node);
     // }
 
-    let insts = gen::generate(nodes)?;
-    // println!(":: Instructions ::");
-    // for inst in insts.iter() {
-    //     println!("{:?}", inst);
-    // }
+    let blocks = gen::generate(nodes)?;
+    println!(":: Bytecode blocks ::");
+    for block in blocks.iter() {
+        println!("{}", block);
+    }
 
-    let mut machine = vm::Vm::new(insts);
+    let mut machine = vm::Vm::new(blocks);
     return machine.run();
 }

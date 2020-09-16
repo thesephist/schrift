@@ -19,7 +19,6 @@ Block {
 	slots: 	5
 	consts:	[3, native_add]
 	binds: 	[]
-	ret:	@5
 	code: [
 		@1	LOAD_ARG 0
 		@2	LOAD_ARG 1
@@ -40,7 +39,6 @@ Block {
 	slots:	5
 	consts: [5, 2, 3]
 	binds:	[]
-	ret:	@6
 	code: [
 		@1	LOAD_CONST 0
 		@3	LOAD_BLOCK @2
@@ -53,7 +51,6 @@ Block {
 	slots:	7
 	consts:	[2, native_add]
 	binds:	[@1]
-	ret:	@13
 	code: [
 		@7	LOAD_ARG 0
 		@8	LOAD_ARG 1
@@ -76,7 +73,6 @@ Block {
 	slots:	6
 	consts:	[1, 0, 10]
 	binds:	[]
-	ret:	@6
 	code: [
 		@1	MAKE_COMP
 		@2	LOAD_CONST 0
@@ -99,7 +95,6 @@ Block {
 	slots:	3
 	consts:	[2, true, false]
 	binds:	[]
-	ret:	@3
 	code: [
 		@1	LOAD_CONST 0
 		@2	LOAD_CONST 0
@@ -111,7 +106,6 @@ Block {
 	slots:	1
 	consts:	[true]
 	binds:	[]
-	ret:	@6
 	code: [
 		@6	LOAD_CONST 0
 	]
@@ -120,7 +114,6 @@ Block {
 	slots:	1
 	consts:	[false]
 	binds:	[]
-	ret:	@7
 	code: [
 		@7	LOAD_CONST 0
 	]
@@ -137,7 +130,6 @@ Block {
 	slots:	2
 	consts:	[5]
 	binds:	[]
-	ret:	@2
 	code: [
 		@1	LOAD_CONST 0
 		@2	CALL @3
@@ -147,7 +139,6 @@ Block {
 	slots:	2
 	consts:	[out]
 	binds:	[@1]
-	ret:	@6
 	code: [
 		@5	LOAD_BIND 0
 		@7	LOAD_CONST 0
@@ -165,7 +156,6 @@ Block {
 	slots:	0
 	consts:	[native1, native2]
 	binds:	[]
-	ret:	@
 	code: [
 		@1	LOAD_CONST 0
 		@2	LOAD_BLOCK @3
@@ -176,7 +166,6 @@ Block {
 	slots:	1
 	consts:	[]
 	binds:	[@1]
-	ret:	@10
 	code: [
 		@10	CALL @1
 	]

@@ -36,7 +36,7 @@ fn analyze_node(node: &mut Node) -> Result<(), InkErr> {
         } => {
             analyze_node(right)?;
             match *(left.clone()) {
-                Node::Ident(name) => (),
+                Node::Ident(_) => (),
                 Node::BinaryExpr {
                     op: TokKind::AccessorOp,
                     left: mut comp_left,

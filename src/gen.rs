@@ -1,6 +1,7 @@
 use crate::err::InkErr;
 use crate::lex::TokKind;
 use crate::parse::Node;
+use std::fmt;
 
 use std::collections::HashMap;
 
@@ -22,7 +23,12 @@ pub enum Val {
 impl Val {
     fn to_ink_string(&self) -> String {
         match &self {
-            // TODO: implement
+            Val::Empty => "_".to_string(),
+            Val::Number(n) => format!("{:.8}", n),
+            // TODO: this will fail if not utf8 bytes
+            Val::Str(bytes) => String::from_utf8(bytes.to_vec()).unwrap(),
+            Val::Bool(v) => v.to_string(),
+            Val::Null => "()".to_string(),
             _ => String::from("(unimplemented)"),
         }
     }
@@ -30,6 +36,7 @@ impl Val {
     fn eq(&self, other: &Val) -> bool {
         match &self {
             // TODO: implement
+            Val::Empty => true,
             _ => false,
         }
     }
@@ -45,7 +52,7 @@ pub enum Op {
     LoadArg(usize),
     LoadConst(usize),
     LoadBind(usize),
-    LoadBlock(Reg),
+    LoadBlock(usize),
 
     Call(Reg),
     CallIfEq(Reg, Reg, Reg),
@@ -70,10 +77,46 @@ pub enum Op {
     Xor(Reg, Reg),
 }
 
+impl fmt::Display for Op {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Op::Nop => write!(f, "NOP"),
+            Op::Mov(reg) => write!(f, "= @{}", reg),
+            Op::LoadArg(idx) => write!(f, "LOAD_ARG {}", idx),
+            Op::LoadConst(idx) => write!(f, "LOAD_CONST {}", idx),
+            Op::LoadBind(idx) => write!(f, "LOAD_BIND {}", idx),
+            Op::LoadBlock(idx) => write!(f, "LOAD_BLOCK {}", idx),
+            Op::Call(reg) => write!(f, "CALL @{}", reg),
+            Op::CallIfEq(reg, a, b) => write!(f, "CALL @{}, @{} @{}", reg, a, b),
+            Op::MakeComp => write!(f, "MAKE_COMP"),
+            Op::SetComp(reg, k, v) => write!(f, "SET_COMP @{}, @{} @{}", reg, k, v),
+            Op::GetComp(reg, k) => write!(f, "SET_COMP @{}, @{}", reg, k),
+            Op::Neg(reg) => write!(f, "~ @{}", reg),
+            Op::Add(a, b) => write!(f, "@{} + @{}", a, b),
+            Op::Sub(a, b) => write!(f, "@{} - @{}", a, b),
+            Op::Mul(a, b) => write!(f, "@{} * @{}", a, b),
+            Op::Div(a, b) => write!(f, "@{} / @{}", a, b),
+            Op::Mod(a, b) => write!(f, "@{} % @{}", a, b),
+            Op::Gtr(a, b) => write!(f, "@{} > @{}", a, b),
+            Op::Lss(a, b) => write!(f, "@{} < @{}", a, b),
+            Op::Eql(a, b) => write!(f, "@{} = @{}", a, b),
+            Op::And(a, b) => write!(f, "@{} & @{}", a, b),
+            Op::Or(a, b) => write!(f, "@{} | @{}", a, b),
+            Op::Xor(a, b) => write!(f, "@{} ^ @{}", a, b),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Inst {
     dest: Reg,
     op: Op,
+}
+
+impl fmt::Display for Inst {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "@{}\t{}", self.dest, self.op)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -81,12 +124,24 @@ pub struct Block {
     pub slots: usize,
     pub consts: Vec<Val>,
     pub binds: Vec<Reg>,
-    pub ret: Reg,
     pub code: Vec<Inst>,
 
-    // integer counter to label
+    // integer counter to label autoincremented
     // pseudo-register allocations.
     iota: usize,
+    scope: HashMap<String, Reg>,
+    parent: Option<Box<Block>>,
+}
+
+impl fmt::Display for Block {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "consts: {:?}", self.consts)?;
+        writeln!(f, "binds: {:?}", self.binds)?;
+        for inst in self.code.iter() {
+            writeln!(f, "  {}", inst)?;
+        }
+        write!(f, "")
+    }
 }
 
 impl Block {
@@ -95,9 +150,10 @@ impl Block {
             slots: 0,
             consts: Vec::new(),
             binds: Vec::new(),
-            ret: 0,
             code: vec![],
             iota: 0,
+            scope: HashMap::new(),
+            parent: None,
         };
     }
 
@@ -110,6 +166,28 @@ impl Block {
     fn push_const(&mut self, val: Val) -> Reg {
         self.consts.push(val);
         return self.consts.len() - 1;
+    }
+
+    fn scope_get(&mut self, name: &String) -> Option<&Reg> {
+        // when a get() needs to cross block boundaries, move the register
+        // to self.binds.
+        return match self.scope.get(name) {
+            Some(reg) => Some(reg),
+            None => match &mut self.parent {
+                Some(parent) => match parent.scope_get(name) {
+                    Some(reg) => {
+                        self.binds.push(reg.clone());
+                        Some(reg)
+                    }
+                    None => None,
+                },
+                None => None,
+            },
+        };
+    }
+
+    fn scope_insert(&mut self, name: String, reg: Reg) -> Option<Reg> {
+        return self.scope.insert(name, reg);
     }
 
     // returns the register at which the result of evaluating `node`
@@ -146,9 +224,13 @@ impl Block {
                         });
                         right_reg
                     }
-                    Node::Ident(_) => {
+                    Node::Ident(name) => {
                         let dest = self.iota();
-                        // TODO: return register allocated by variable declaration
+                        self.scope_insert(name.clone(), dest);
+                        self.code.push(Inst {
+                            dest,
+                            op: Op::Mov(right_reg),
+                        });
                         dest
                     }
                     Node::EmptyIdent => right_reg,
@@ -244,15 +326,13 @@ impl Block {
                 self.code.push(Inst { dest, op: Op::Nop });
                 dest
             }
-            Node::Ident(_) => {
-                // TODO: generate declaration to register in context
-                let dest = self.iota();
-                self.code.push(Inst {
-                    dest,
-                    op: Op::Mov(0),
-                });
-                dest
-            }
+            Node::Ident(name) => match self.scope_get(name) {
+                Some(reg) => reg.clone(),
+                None => {
+                    println!("Could not find variable {:?} in current scope", name);
+                    return Err(InkErr::UndefinedVariable);
+                }
+            },
             Node::NumberLiteral(n) => {
                 let dest = self.iota();
                 let const_dest = self.push_const(Val::Number(n.clone()));

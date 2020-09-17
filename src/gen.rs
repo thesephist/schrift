@@ -508,7 +508,12 @@ impl Block {
                         _ => (),
                     }
                 }
-                func_block.generate_nodes(vec![*body.clone()], push_block)?;
+                match &**body {
+                    Node::ExprList(exprs) => {
+                        func_block.generate_nodes(exprs.to_vec(), push_block)?
+                    }
+                    _ => func_block.generate_nodes(vec![*body.clone()], push_block)?,
+                }
 
                 let block_idx = push_block(func_block);
 

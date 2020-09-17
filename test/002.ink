@@ -7,7 +7,11 @@ first := 1 * 2 * 3
 second := (4 + 5 + 6)
 log(first + second + first + second)
 
-add3 := (n) => 1 + 2 + n
+add3 := (n) => (
+	x := 1 + 2 + n
+	n
+)
+log('should say 6:')
 log(add3(3))
 
 log('hello,' + ' world!')

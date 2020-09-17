@@ -15,8 +15,8 @@ const INK_VERSION: &str = "0.1.7";
 fn main() {
     let opts = args::get_cli_opts();
 
-    match opts.action {
-        args::Action::Eval(mode) => run_eval(mode),
+    match opts.clone().action {
+        args::Action::Eval(mode) => run_eval(mode, opts),
         args::Action::Version => print_version(),
         args::Action::Help => print_help(),
     }
@@ -30,10 +30,10 @@ fn print_help() {
     println!("help...");
 }
 
-fn run_eval(mode: args::EvalMode) {
+fn run_eval(mode: args::EvalMode, opts: args::Opts) {
     let result = match mode {
-        args::EvalMode::RunFile(path) => eval_file(path),
-        args::EvalMode::Eval(prog) => eval_string(prog),
+        args::EvalMode::RunFile(path) => eval_file(path, opts),
+        args::EvalMode::Eval(prog) => eval_string(prog, opts),
         args::EvalMode::Repl => Ok(println!("repl")),
     };
 
@@ -43,7 +43,7 @@ fn run_eval(mode: args::EvalMode) {
     }
 }
 
-fn eval_file(path: PathBuf) -> Result<(), err::InkErr> {
+fn eval_file(path: PathBuf, opts: args::Opts) -> Result<(), err::InkErr> {
     let file = match fs::read_to_string(path) {
         Ok(prog) => prog,
         Err(e) => {
@@ -52,32 +52,40 @@ fn eval_file(path: PathBuf) -> Result<(), err::InkErr> {
         }
     };
 
-    return eval_string(file);
+    return eval_string(file, opts);
 }
 
-fn eval_string(prog: String) -> Result<(), err::InkErr> {
+fn eval_string(prog: String, opts: args::Opts) -> Result<(), err::InkErr> {
     let tokens = lex::tokenize(&prog)?;
-    // println!(":: Tokens ::");
-    // for (i, tok) in tokens.iter().enumerate() {
-    //     println!("{}  {}", i, tok);
-    // }
+    if opts.debug_lex {
+        println!(":: Tokens ::");
+        for (i, tok) in tokens.iter().enumerate() {
+            println!("{}  {}", i, tok);
+        }
+    }
 
     let mut nodes = parse::parse(tokens)?;
-    // println!(":: AST nodes ::");
-    // for node in nodes.iter() {
-    //     println!("{:?}", node);
-    // }
+    if opts.debug_parse {
+        println!(":: AST nodes ::");
+        for node in nodes.iter() {
+            println!("{:?}", node);
+        }
+    }
 
     analyze::analyze(&mut nodes)?;
-    // println!(":: Analyzed AST nodes ::");
-    // for node in nodes.iter() {
-    //     println!("{:?}", node);
-    // }
+    if opts.debug_analyze {
+        println!(":: Analyzed AST nodes ::");
+        for node in nodes.iter() {
+            println!("{:?}", node);
+        }
+    }
 
     let blocks = gen::generate(nodes)?;
-    println!(":: Bytecode blocks ::");
-    for block in blocks.iter() {
-        println!("{}", block);
+    if opts.debug_compile {
+        println!(":: Bytecode blocks ::");
+        for block in blocks.iter() {
+            println!("{}", block);
+        }
     }
 
     let mut machine = vm::Vm::new(blocks);

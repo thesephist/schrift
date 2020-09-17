@@ -22,11 +22,11 @@ Schrift is my second attempt at an Ink interpreter, focused on performance and d
 
 Schrift is a register-based bytecode virtual machine with a traditional `white-switch` dispatch loop.
 
-### Scan & parse
+### Scan & parse `lex.rs`, `parse.rs`
 
 Schrift contains a lexer and parser for the full Ink language grammar, including comments.
 
-### Static analysis
+### Static analysis `analyze.rs`
 
 Static analysis in Schrift performs at least the following, for code generation and optimization.
 
@@ -34,7 +34,7 @@ Static analysis in Schrift performs at least the following, for code generation 
 - Escape analysis
 - Expression normalization for easier code generation
 
-### (Byte)code generation
+### (Byte)code generation `gen.rs`
 
 The VM's bytecode is a flattened, optimized representation of an Ink program. The main goal of the bytecode format is
 
@@ -44,7 +44,7 @@ The VM's bytecode is a flattened, optimized representation of an Ink program. Th
 
 Schrift's bytecode is register-based and designed to be an optimized single static assignment (SSA) form of the Ink AST. Each function and expression list in Ink is compiled to a separate contiguous block of bytecode, called a `Block`, to allow for incremental compilation and replacements of parts of a program during interactive evaluation of a program. An Ink program is then compiled into a flat list of `Block`s that reference each other to form a call graph.
 
-### Optimizations
+### Optimizations `optimize.rs`
 
 On the bytecode, Schrift performs at least the following optimizations.
 
@@ -54,13 +54,13 @@ On the bytecode, Schrift performs at least the following optimizations.
 - Function call inlining
 - Tail call elimination (unrolling tail recursion into loops)
 
-### Schrift virtual machine
+### Schrift virtual machine `vm.rs`
 
 The VM design is in progress, but will include the following.
 
 - Composite values are backed by both a growable array and a hashmap, a la JavaScript and Lua.
 
-### Runtime and garbage collection
+### Runtime and garbage collection `runtime.rs`
 
 Primitive values in Schrift that never escape a stack frame are allocated locally on the stack. This makes many common use cases of local variables, like iteration indexes and temporaries, efficient. When values are assigned to composites or captured in closures, they _escape_ the local frame, and need to be heap-allocated. Initially, Schrift will use automatic reference counting for memory management on the heap. This is because ARC is:
 

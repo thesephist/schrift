@@ -29,6 +29,7 @@ pub struct Opts {
     pub debug_parse: bool,
     pub debug_analyze: bool,
     pub debug_compile: bool,
+    pub debug_optimize: bool,
 }
 
 pub fn get_cli_opts() -> Opts {
@@ -42,6 +43,7 @@ pub fn get_cli_opts() -> Opts {
         debug_parse: false,
         debug_analyze: false,
         debug_compile: false,
+        debug_optimize: false,
     };
 
     opts.action = if args.len() == 0 {
@@ -74,6 +76,7 @@ pub fn get_cli_opts() -> Opts {
                 "debug-parse" => opts.debug_parse = true,
                 "debug-analyze" => opts.debug_analyze = true,
                 "debug-compile" => opts.debug_compile = true,
+                "debug-optimize" => opts.debug_optimize = true,
                 _ => (),
             }
         }
@@ -85,6 +88,7 @@ pub fn get_cli_opts() -> Opts {
                 "Dp" => opts.debug_parse = true,
                 "Da" => opts.debug_analyze = true,
                 "Dc" => opts.debug_compile = true,
+                "Do" => opts.debug_optimize = true,
                 _ => (),
             }
         }

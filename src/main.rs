@@ -6,6 +6,7 @@ mod args;
 mod err;
 mod gen;
 mod lex;
+mod optimize;
 mod parse;
 mod runtime;
 mod vm;
@@ -83,11 +84,19 @@ fn eval_string(prog: String, opts: args::Opts) -> Result<(), err::InkErr> {
     let blocks = gen::generate(nodes)?;
     if opts.debug_compile {
         println!(":: Bytecode blocks ::");
-        for block in blocks.iter() {
-            println!("{}", block);
+        for (i, block) in blocks.iter().enumerate() {
+            println!("#{}\n{}", i, block);
         }
     }
 
-    let mut machine = vm::Vm::new(blocks);
+    let optimized_blocks = optimize::optimize(blocks);
+    if opts.debug_optimize {
+        println!(":: Optimized bytecode blocks ::");
+        for (i, block) in optimized_blocks.iter().enumerate() {
+            println!("#{}\n{}", i, block);
+        }
+    }
+
+    let mut machine = vm::Vm::new(optimized_blocks);
     return machine.run();
 }

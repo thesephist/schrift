@@ -170,6 +170,8 @@ impl Block {
         return match self.scope.get(name) {
             Some(reg) => Some(reg),
             None => match &mut self.parent {
+                // TODO: need some way to mark that this is a closure/bound-get
+                // of an escaped var and not a local variable to the block/frame.
                 Some(parent) => match parent.scope_get(name) {
                     Some(reg) => {
                         self.binds.push(reg.clone());
@@ -191,11 +193,19 @@ impl Block {
         F: FnMut(Block) -> usize,
     {
         let mut block = Block::new();
-        for node in nodes.iter() {
-            block.generate_node(&node, push_block)?;
-        }
-        block.slots = block.code.len();
+        block.generate_nodes(nodes, push_block)?;
         return Ok(block);
+    }
+
+    fn generate_nodes<F>(&mut self, nodes: Vec<Node>, push_block: &mut F) -> Result<(), InkErr>
+    where
+        F: FnMut(Block) -> usize,
+    {
+        for node in nodes.iter() {
+            self.generate_node(&node, push_block)?;
+        }
+        self.slots = self.iota;
+        return Ok(());
     }
 
     // returns the register at which the result of evaluating `node`
@@ -333,9 +343,22 @@ impl Block {
                 // TODO: must produce block per clause
                 self.iota()
             }
-            Node::ExprList(_exprs) => {
-                // TODO: must produce another block!
-                self.iota()
+            Node::ExprList(exprs) => {
+                let exprlist_block = Block::from_nodes(exprs.clone(), push_block)?;
+                let block_idx = push_block(exprlist_block);
+
+                let closure_dest = self.iota();
+                let const_dest = self.push_const(Val::Func(block_idx));
+                self.code.push(Inst {
+                    dest: closure_dest,
+                    op: Op::LoadConst(const_dest),
+                });
+                let call_dest = self.iota();
+                self.code.push(Inst {
+                    dest: call_dest,
+                    op: Op::Call(closure_dest, Vec::new()),
+                });
+                call_dest
             }
             Node::EmptyIdent => {
                 let dest = self.iota();
@@ -442,16 +465,19 @@ impl Block {
                 dest
             }
             Node::FnLiteral { args, body } => {
-                let mut func_block = Block::from_nodes(vec![*body.clone()], push_block)?;
+                let mut func_block = Block::new();
                 for arg in args.iter() {
                     match arg {
                         Node::Ident(name) => {
                             let arg_reg = func_block.iota();
                             func_block.scope.insert(name.clone(), arg_reg);
+                            println!("allocated {} for @{}", name, arg_reg);
                         }
                         _ => (),
                     }
                 }
+                func_block.generate_nodes(vec![*body.clone()], push_block)?;
+
                 let block_idx = push_block(func_block);
 
                 let dest = self.iota();
@@ -477,7 +503,7 @@ pub fn generate(nodes: Vec<Node>) -> Result<Vec<Block>, InkErr> {
     let mut prog = Vec::<Block>::new();
     let main_block = Block::from_nodes(nodes, &mut |block| {
         prog.push(block);
-        return prog.len() - 1;
+        return prog.len();
     })?;
 
     // ensure main loop is first

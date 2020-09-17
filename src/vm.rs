@@ -25,7 +25,6 @@ impl Frame {
 
 #[derive(Debug)]
 pub struct Vm {
-    bp: usize,      // block counter
     heap: Vec<Val>, // escaped (bind) values
     stack: Vec<Frame>,
     prog: Vec<Block>,
@@ -52,7 +51,6 @@ impl fmt::Display for Vm {
 impl Vm {
     pub fn new(prog: Vec<Block>) -> Vm {
         return Vm {
-            bp: 0,
             heap: Vec::<Val>::new(),
             stack: Vec::<Frame>::new(),
             prog: prog,

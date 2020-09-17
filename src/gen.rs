@@ -20,7 +20,7 @@ pub enum Val {
     Bool(bool),
     Null,
     Comp(HashMap<Vec<u8>, Val>),
-    Func(Block),
+    Func(usize), // usize is Block index in Prog
     NativeFunc(NativeFn),
 }
 
@@ -186,10 +186,13 @@ impl Block {
         return self.scope.insert(name, reg);
     }
 
-    fn from_nodes(nodes: Vec<Node>) -> Result<Block, InkErr> {
+    fn from_nodes<F>(nodes: Vec<Node>, push_block: &mut F) -> Result<Block, InkErr>
+    where
+        F: FnMut(Block) -> usize,
+    {
         let mut block = Block::new();
         for node in nodes.iter() {
-            block.generate_node(&node)?;
+            block.generate_node(&node, push_block)?;
         }
         block.slots = block.code.len();
         return Ok(block);
@@ -197,10 +200,13 @@ impl Block {
 
     // returns the register at which the result of evaluating `node`
     // is stored, after executing all generated code for the given node.
-    fn generate_node(&mut self, node: &Node) -> Result<Reg, InkErr> {
+    fn generate_node<F>(&mut self, node: &Node, push_block: &mut F) -> Result<Reg, InkErr>
+    where
+        F: FnMut(Block) -> usize,
+    {
         let result_reg = match node {
             Node::UnaryExpr { op: _, arg } => {
-                let arg_reg = self.generate_node(&arg)?;
+                let arg_reg = self.generate_node(&arg, push_block)?;
                 let dest = self.iota();
                 self.code.push(Inst {
                     dest,
@@ -213,19 +219,21 @@ impl Block {
                 left: define_left,
                 right: define_right,
             } => {
-                let right_reg = self.generate_node(&define_right)?;
+                let right_reg = self.generate_node(&define_right, push_block)?;
 
                 match *(define_left.clone()) {
                     Node::BinaryExpr {
                         op: TokKind::AccessorOp,
-                        left: _comp_left,
-                        right: _comp_right,
+                        left: comp_left,
+                        right: comp_right,
                     } => {
+                        let comp_left_reg = self.generate_node(&comp_left, push_block)?;
+                        let comp_right_reg = self.generate_node(&comp_right, push_block)?;
+
                         let dest = self.iota();
                         self.code.push(Inst {
                             dest,
-                            // TODO: Op::SetComp for comp register, key register, and right_reg;
-                            op: Op::Nop,
+                            op: Op::SetComp(comp_left_reg, comp_right_reg, right_reg),
                         });
                         right_reg
                     }
@@ -246,8 +254,8 @@ impl Block {
                 }
             }
             Node::BinaryExpr { op, left, right } => {
-                let left_reg = self.generate_node(&left)?;
-                let right_reg = self.generate_node(&right)?;
+                let left_reg = self.generate_node(&left, push_block)?;
+                let right_reg = self.generate_node(&right, push_block)?;
                 let dest = self.iota();
                 match op {
                     TokKind::AddOp => self.code.push(Inst {
@@ -306,10 +314,10 @@ impl Block {
                 dest
             }
             Node::FnCall { func, args } => {
-                let func_reg = self.generate_node(&func)?;
+                let func_reg = self.generate_node(&func, push_block)?;
                 let mut arg_regs = Vec::new();
                 for arg in args.iter() {
-                    arg_regs.push(self.generate_node(arg)?);
+                    arg_regs.push(self.generate_node(arg, push_block)?);
                 }
                 let dest = self.iota();
                 self.code.push(Inst {
@@ -397,8 +405,8 @@ impl Block {
                 for entry in entries.iter() {
                     match entry {
                         Node::ObjectEntry { key, val } => {
-                            let key_reg = self.generate_node(key)?;
-                            let val_reg = self.generate_node(val)?;
+                            let key_reg = self.generate_node(key, push_block)?;
+                            let val_reg = self.generate_node(val, push_block)?;
                             let entry_dest = self.iota();
                             self.code.push(Inst {
                                 dest: entry_dest,
@@ -424,7 +432,7 @@ impl Block {
                         op: Op::LoadConst(index_reg),
                     });
 
-                    let item_reg = self.generate_node(item)?;
+                    let item_reg = self.generate_node(item, push_block)?;
                     let item_dest = self.iota();
                     self.code.push(Inst {
                         dest: item_dest,
@@ -433,12 +441,26 @@ impl Block {
                 }
                 dest
             }
-            Node::FnLiteral {
-                args: _args,
-                body: _body,
-            } => {
-                // TODO: must produce another block!
-                self.iota()
+            Node::FnLiteral { args, body } => {
+                let mut func_block = Block::from_nodes(vec![*body.clone()], push_block)?;
+                for arg in args.iter() {
+                    match arg {
+                        Node::Ident(name) => {
+                            let arg_reg = func_block.iota();
+                            func_block.scope.insert(name.clone(), arg_reg);
+                        }
+                        _ => (),
+                    }
+                }
+                let block_idx = push_block(func_block);
+
+                let dest = self.iota();
+                let const_dest = self.push_const(Val::Func(block_idx));
+                self.code.push(Inst {
+                    dest,
+                    op: Op::LoadConst(const_dest),
+                });
+                dest
             }
             _ => {
                 let dest = self.iota();
@@ -452,6 +474,15 @@ impl Block {
 }
 
 pub fn generate(nodes: Vec<Node>) -> Result<Vec<Block>, InkErr> {
-    let main_block = Block::from_nodes(nodes)?;
-    return Ok(vec![main_block]);
+    let mut prog = Vec::<Block>::new();
+    let main_block = Block::from_nodes(nodes, &mut |block| {
+        prog.push(block);
+        return prog.len() - 1;
+    })?;
+
+    // ensure main loop is first
+    let mut main_prog = vec![main_block];
+    main_prog.append(&mut prog);
+
+    return Ok(main_prog);
 }

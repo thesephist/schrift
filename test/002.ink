@@ -1,5 +1,7 @@
 ` eval test `
-a := 2
-b := 3
-out(string(a + b) + char(10))
-out(string(1 + 2 + 3 + 4 + 5) + char(10))
+
+first := 1 + 2 + 3
+second := 4 + 5 + 6
+out(string(first + second + first + second) + char(10))
+
+get3 := () => 1 + 2

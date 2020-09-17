@@ -6,15 +6,15 @@ use crate::runtime;
 
 #[derive(Debug)]
 pub struct Frame {
-    rbp: usize, // return address (block pointer)
+    ip: usize, // instruction pointer
     regs: Vec<Val>,
     block: Block,
 }
 
 impl Frame {
-    fn new(rbp: usize, block: Block) -> Frame {
+    fn new(block: Block) -> Frame {
         return Frame {
-            rbp: rbp,
+            ip: 0,
             regs: vec![Val::Empty; block.slots],
             block: block,
         };
@@ -31,7 +31,6 @@ pub struct Vm {
 
 impl fmt::Display for Vm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "bp: {}", self.bp)?;
         writeln!(f, "heap:")?;
         for val in &self.heap {
             writeln!(f, "  {:?}", val)?;
@@ -59,8 +58,8 @@ impl Vm {
     }
 
     pub fn run(&mut self) -> Result<(), InkErr> {
-        let main_block = &self.prog[self.bp];
-        let main_frame = Frame::new(0, main_block.clone());
+        let main_block = &self.prog.first().unwrap();
+        let main_frame = Frame::new((*main_block).clone());
         self.stack.push(main_frame);
 
         while self.stack.len() > 0 {
@@ -80,12 +79,16 @@ impl Vm {
                         let callee_fn = &frame.regs[f_reg];
                         std::thread::sleep(std::time::Duration::from_millis(10));
                         match callee_fn {
-                            Val::Func(callee_block) => {
-                                let mut callee_frame = Frame::new(self.bp, callee_block.clone());
+                            Val::Func(callee_block_idx) => {
+                                let callee_block = &self.prog[callee_block_idx.clone()];
+                                let mut callee_frame = Frame::new(callee_block.clone());
+
                                 for (i, arg_reg) in arg_regs.iter().enumerate() {
                                     callee_frame.regs[i] = frame.regs[arg_reg.clone()].clone();
                                 }
+
                                 // TODO: push the stack and restart vm dispatch loop
+                                // self.stack.push(callee_frame);
                             }
                             Val::NativeFunc(func) => {
                                 let args = arg_regs

@@ -369,21 +369,15 @@ impl Block {
                 None => {
                     let dest = self.iota();
                     let const_dest: Reg;
-                    match name.as_str() {
-                        "out" => {
-                            const_dest = self.push_const(Val::NativeFunc(runtime::builtin_out))
-                        }
-                        "char" => {
-                            const_dest = self.push_const(Val::NativeFunc(runtime::builtin_char))
-                        }
-                        "string" => {
-                            const_dest = self.push_const(Val::NativeFunc(runtime::builtin_string))
-                        }
+                    const_dest = match name.as_str() {
+                        "out" => self.push_const(Val::NativeFunc(runtime::builtin_out)),
+                        "char" => self.push_const(Val::NativeFunc(runtime::builtin_char)),
+                        "string" => self.push_const(Val::NativeFunc(runtime::builtin_string)),
                         _ => {
                             println!("Could not find variable {:?} in current scope", name);
                             return Err(InkErr::UndefinedVariable);
                         }
-                    }
+                    };
                     self.code.push(Inst {
                         dest,
                         op: Op::LoadConst(const_dest),

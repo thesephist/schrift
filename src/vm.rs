@@ -86,10 +86,21 @@ impl Vm {
 
             match inst.op.clone() {
                 Op::Nop => (),
+                Op::Neg(reg) => frame.regs[dest] = runtime::neg(&frame.regs[reg])?,
                 Op::Mov(reg) => frame.regs[dest] = frame.regs[reg].clone(),
-                Op::Add(a, b) => {
-                    frame.regs[dest] = runtime::add(&frame.regs[a], &frame.regs[b])?.clone()
+                Op::Add(a, b) => frame.regs[dest] = runtime::add(&frame.regs[a], &frame.regs[b])?,
+                Op::Sub(a, b) => frame.regs[dest] = runtime::sub(&frame.regs[a], &frame.regs[b])?,
+                Op::Mul(a, b) => frame.regs[dest] = runtime::mul(&frame.regs[a], &frame.regs[b])?,
+                Op::Div(a, b) => frame.regs[dest] = runtime::div(&frame.regs[a], &frame.regs[b])?,
+                Op::And(a, b) => {
+                    frame.regs[dest] = runtime::bin_and(&frame.regs[a], &frame.regs[b])?
                 }
+                Op::Or(a, b) => frame.regs[dest] = runtime::bin_or(&frame.regs[a], &frame.regs[b])?,
+                Op::Xor(a, b) => {
+                    frame.regs[dest] = runtime::bin_xor(&frame.regs[a], &frame.regs[b])?
+                }
+                Op::Gtr(a, b) => frame.regs[dest] = runtime::gtr(&frame.regs[a], &frame.regs[b])?,
+                Op::Lss(a, b) => frame.regs[dest] = runtime::lss(&frame.regs[a], &frame.regs[b])?,
                 Op::Call(f_reg, arg_regs) => {
                     // TODO: tail call optimization should be implemented in the VM,
                     // not the compiler. If Op::Call is the last instruction of a Block,

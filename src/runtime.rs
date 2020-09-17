@@ -3,6 +3,16 @@ use std::io::{self, Write};
 use crate::err::InkErr;
 use crate::gen::Val;
 
+pub fn neg(v: &Val) -> Result<Val, InkErr> {
+    let result = match v {
+        Val::Number(n) => Val::Number(-n),
+        Val::Bool(b) => Val::Bool(!b),
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
 pub fn add(a: &Val, b: &Val) -> Result<Val, InkErr> {
     let result = match a {
         Val::Number(num_a) => match b {
@@ -14,6 +24,134 @@ pub fn add(a: &Val, b: &Val) -> Result<Val, InkErr> {
                 let mut append_to = bytes_a.clone();
                 append_to.extend(bytes_b.clone());
                 return Ok(Val::Str(append_to));
+            }
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        Val::Bool(bool_a) => match b {
+            Val::Bool(bool_b) => return Ok(Val::Bool(*bool_a || *bool_b)),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
+pub fn sub(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    let result = match a {
+        Val::Number(num_a) => match b {
+            Val::Number(num_b) => Val::Number(num_a - num_b),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
+pub fn mul(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    let result = match a {
+        Val::Number(num_a) => match b {
+            Val::Number(num_b) => Val::Number(num_a * num_b),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        Val::Bool(bool_a) => match b {
+            Val::Bool(bool_b) => return Ok(Val::Bool(*bool_a && *bool_b)),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
+pub fn div(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    let result = match a {
+        Val::Number(num_a) => match b {
+            Val::Number(num_b) => Val::Number(num_a / num_b),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
+pub fn bin_and(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    let result = match a {
+        Val::Number(num_a) => match b {
+            Val::Number(num_b) => Val::Number((*num_a as i64 & *num_b as i64) as f64),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        Val::Bool(bool_a) => match b {
+            Val::Bool(bool_b) => return Ok(Val::Bool(*bool_a && *bool_b)),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
+pub fn bin_or(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    let result = match a {
+        Val::Number(num_a) => match b {
+            Val::Number(num_b) => Val::Number((*num_a as i64 | *num_b as i64) as f64),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        Val::Bool(bool_a) => match b {
+            Val::Bool(bool_b) => return Ok(Val::Bool(*bool_a || *bool_b)),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
+pub fn bin_xor(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    let result = match a {
+        Val::Number(num_a) => match b {
+            Val::Number(num_b) => Val::Number((*num_a as i64 ^ *num_b as i64) as f64),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        Val::Bool(bool_a) => match b {
+            Val::Bool(bool_b) => return Ok(Val::Bool(*bool_a != *bool_b)),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
+pub fn gtr(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    let result = match a {
+        Val::Number(num_a) => match b {
+            Val::Number(num_b) => Val::Bool(num_a > num_b),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        Val::Str(_bytes_a) => match b {
+            Val::Str(_bytes_b) => {
+                return Err(InkErr::InvalidOperand);
+            }
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
+pub fn lss(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    let result = match a {
+        Val::Number(num_a) => match b {
+            Val::Number(num_b) => Val::Bool(num_a < num_b),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        Val::Str(_bytes_a) => match b {
+            Val::Str(_bytes_b) => {
+                return Err(InkErr::InvalidOperand);
             }
             _ => return Err(InkErr::InvalidOperand),
         },

@@ -28,7 +28,6 @@ pub enum Val {
 impl Val {
     pub fn eq(&self, other: &Val) -> bool {
         match &self {
-            // TODO: implement
             Val::Empty => true,
             _ => false,
         }
@@ -471,7 +470,6 @@ impl Block {
                         Node::Ident(name) => {
                             let arg_reg = func_block.iota();
                             func_block.scope.insert(name.clone(), arg_reg);
-                            println!("allocated {} for @{}", name, arg_reg);
                         }
                         _ => (),
                     }

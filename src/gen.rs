@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Arc;
 
 use crate::err::InkErr;
 use crate::lex::TokKind;
@@ -20,8 +21,41 @@ pub enum Val {
     Bool(bool),
     Null,
     Comp(HashMap<Vec<u8>, Val>),
-    Func(usize), // usize is Block index in Prog
+    Func(usize), // usize is Block index in Vec<Block>
     NativeFunc(NativeFn),
+
+    // Val::Escaped(Arc<Val>) is a proxy value placed in registers to tell the VM that the register
+    // value has been moved to the VM's heap.
+    //
+    // At compile time:
+    // ===============
+    //
+    // When a variable in scope A register R is determined to have escaped by a closure with scope
+    // B (or a composite), the compiler makes these changes:
+    //
+    // 1. In Block A, add instruction [@R ESCAPE] which tells the VM to move the value to the VM
+    //    heap
+    // 2. Add a reference (TBD) to Block B's Block::bind vector that will runtime-reference
+    //    register @R in A.
+    // 2. In Block B, add instruction [@? LOAD_ESC N] when loading the closed-over variable, which
+    //    will pull from the runtime-created vec of heap pointers (Vec::Escaped's).
+    //
+    // At runtime:
+    // ===========
+    //
+    // When the VM LOAD_CONST's a function literal:
+    //
+    // 1. If the Val::Func's block has any closed-over variable registers in Block::bind, /clone/
+    //    the Val::Func and add to it the runtime-determined Vec::Escaped's sitting in those
+    //    registers. This produces a new "function object" which is the closure closing over
+    //    runtime values sitting on the VM heap.
+    //
+    // When the VM CALL's a Val::Func:
+    //
+    // 1. If the Val::Func has any heap pointers in its heap pointer (closed-over variables)
+    //    vector, make those Val::Escaped's (heap pointers) available in the vm::Frame in a
+    //    predictable way to the frame's bytecode.
+    Escaped(Arc<Val>),
 }
 
 #[allow(unused)]
@@ -40,10 +74,11 @@ pub enum Op {
     Nop,
 
     Mov(Reg),
+    Escape,
 
     LoadConst(usize),
     LoadBind(usize),
-    LoadBlock(usize),
+    LoadEsc(usize),
 
     Call(Reg, Vec<Reg>),
     CallIfEq(Reg, Reg, Reg, usize),
@@ -73,9 +108,10 @@ impl fmt::Display for Op {
         match self {
             Op::Nop => write!(f, "NOP"),
             Op::Mov(reg) => write!(f, "= @{}", reg),
+            Op::Escape => write!(f, "ESCAPE"),
             Op::LoadConst(idx) => write!(f, "LOAD_CONST {}", idx),
             Op::LoadBind(idx) => write!(f, "LOAD_BIND {}", idx),
-            Op::LoadBlock(idx) => write!(f, "LOAD_BLOCK {}", idx),
+            Op::LoadEsc(idx) => write!(f, "LOAD_ESC {}", idx),
             Op::Call(reg, args) => write!(
                 f,
                 "CALL @{}, [{:?}]",
@@ -173,6 +209,8 @@ impl Block {
             None => match &mut self.parent {
                 // TODO: need some way to mark that this is a closure/bound-get
                 // of an escaped var and not a local variable to the block/frame.
+                // We do this by addding the ESCAPE instruction in the parent scope
+                // against the variable's register.
                 Some(parent) => match parent.scope_get(name) {
                     Some(reg) => {
                         self.binds.push(reg.clone());

@@ -2,13 +2,13 @@
 	Bytecode specification for Schrift
 
 	- Every ExprList is compiled to its Block.
-		- This means anything that should be a Block should be an ExprList prior to
-		  compilation
+		- This means anything that should be a Block should be an ExprList
+		  prior to compilation
 
 	CONSIDERATIONS
-	- should ops be allowed to take arg(x) / const(x) / bind(x) as arguments?  this
-	  needs a more complex instruction decoding pipeline but will dramatically
-	  reduce stack/register usage.
+	- should ops be allowed to take const(x) as arguments?  this needs a more
+	  complex instruction decoding pipeline but will dramatically reduce
+	  stack/register usage.
 `
 
 a := 1
@@ -17,15 +17,14 @@ a + b + 3
 
 Block {
 	slots: 	5
-	consts:	[3, native_add]
-	binds: 	[]
+	consts:	[3]
+	binds:	[]
 	code: [
 		@1	LOAD_ARG 0
 		@2	LOAD_ARG 1
-		@6	LOAD_CONST 1
-		@3	CALL @6 @1 @2
+		@3	ADD @1 @2
 		@4	LOAD_CONST 0
-		@5	CALL @6 @3 @4
+		@5	ADD @3 @4
 	]
 }
 
@@ -37,29 +36,29 @@ g := f(2, 3)
 
 Block {
 	slots:	5
-	consts: [5, 2, 3]
+	consts: [5, 2, 3, #1]
 	binds:	[]
 	code: [
 		@1	LOAD_CONST 0
-		@3	LOAD_BLOCK @2
+		@1	ESCAPE ` escape to heap, puts Val::HeapPtr(Arc<Val>) in @15 `
+		@3	LOAD_CONST 3
 		@4	LOAD_CONST 1
 		@5	LOAD_CONST 2
-		@6	CALL @3 @4 @5
+		@6	CALL @3 [@4, @5]
 	]
 }
-@2 -> Block {
+#1 -> Block {
 	slots:	7
-	consts:	[2, native_add]
+	consts:	[2] ` @15 is a Val::HeapPtr(Arc<Val>) to the heap `
 	binds:	[@1]
 	code: [
-		@7	LOAD_ARG 0
-		@8	LOAD_ARG 1
-		@14	LOAD_CONST 1
-		@9	CALL @14 @7 @8
-		@10	LOAD_BIND 0
-		@11	CALL @14 @9 @10
+		@7	LOAD_ARG 0 ` argument slots are filled automatically `
+		@8	LOAD_ARG 1 ` by the virtual machine, here for illustrative purposes `
+		@9	ADD @7 @8
+		@10	LOAD_ESC 0 ` load escaped value from the heap `
+		@11	ADD @9 @10
 		@12	LOAD_CONST 0
-		@13	CALL @14 @11 @12
+		@13	ADD @11 @12
 	]
 }
 
@@ -110,7 +109,6 @@ Block {
 @4 -> Block {
 	slots:	1
 	consts:	[true]
-	binds:	[]
 	code: [
 		@6	LOAD_CONST 0
 	]
@@ -118,7 +116,6 @@ Block {
 @5 -> Block {
 	slots:	1
 	consts:	[false]
-	binds:	[]
 	code: [
 		@7	LOAD_CONST 0
 	]
@@ -129,25 +126,27 @@ Block {
 ` exprlist as inline closure `
 
 n := 5
-( out(a) )
+( out(n) )
 
 Block {
 	slots:	2
-	consts:	[5]
+	consts:	[5, #1]
 	binds:	[]
 	code: [
 		@1	LOAD_CONST 0
-		@2	CALL @3
+		@1	ESCAPE
+		@4	LOAD_CONST 1
+		@2	CALL @4 []
 	]
 }
-@3 -> Block {
+#1 -> Block {
 	slots:	2
-	consts:	[out]
+	consts:	[builtin_out]
 	binds:	[@1]
 	code: [
-		@5	LOAD_BIND 0
+		@5	LOAD_ESC 0
 		@7	LOAD_CONST 0
-		@6	CALL @7 @5
+		@6	CALL @7 [@5]
 	]
 }
 
@@ -159,19 +158,21 @@ a := native2
 
 Block {
 	slots:	0
-	consts:	[native1, native2]
+	consts:	[native1, native2, #1]
 	binds:	[]
 	code: [
 		@1	LOAD_CONST 0
-		@2	LOAD_BLOCK @3
+		@1	ESCAPE
+		@2	LOAD_CONST 2
 		@1	LOAD_CONST 1
 	]
 }
-@3 -> Block {
+#1 -> Block {
 	slots:	1
 	consts:	[]
 	binds:	[@1]
 	code: [
-		@10	CALL @1
+		@11	LOAD_ESC 0
+		@10	CALL @11 []
 	]
 }

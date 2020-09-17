@@ -46,7 +46,7 @@ pub enum Op {
     LoadBlock(usize),
 
     Call(Reg, Vec<Reg>),
-    CallIfEq(Reg, Reg, Reg),
+    CallIfEq(Reg, Reg, Reg, usize),
 
     MakeComp,
     SetComp(Reg, Reg, Reg),
@@ -82,7 +82,9 @@ impl fmt::Display for Op {
                 reg,
                 args.iter().map(|r| format!("@{}", r)).collect::<String>()
             ),
-            Op::CallIfEq(reg, a, b) => write!(f, "CALL @{}, @{} @{}", reg, a, b),
+            Op::CallIfEq(reg, a, b, jump_by) => {
+                write!(f, "CALL @{}, @{} @{}, {}", reg, a, b, jump_by)
+            }
             Op::MakeComp => write!(f, "MAKE_COMP"),
             Op::SetComp(reg, k, v) => write!(f, "SET_COMP @{}, @{} @{}", reg, k, v),
             Op::GetComp(reg, k) => write!(f, "SET_COMP @{}, @{}", reg, k),

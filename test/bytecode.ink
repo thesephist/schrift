@@ -98,8 +98,13 @@ Block {
 	code: [
 		@1	LOAD_CONST 0
 		@2	LOAD_CONST 0
-		@3	CALL_IF_EQ @4 @1 @2
-		@3	CALL @5
+		` arguments here are:
+			- block to call
+			- eq arguments (1 and 2)
+			- number of extra instructions
+				to jump if called `
+		@3	CALL_IF_EQ @4 @1 @2 1
+		@3	CALL_IF_EQ @5 @1 @2 0
 	]
 }
 @4 -> Block {

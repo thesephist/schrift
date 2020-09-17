@@ -24,7 +24,7 @@ Schrift is a register-based bytecode virtual machine with a traditional `white-s
 
 ### Scan & parse
 
-Schrift contains a parser for the full Ink language grammar, including comments.
+Schrift contains a lexer and parser for the full Ink language grammar, including comments.
 
 ### Static analysis
 
@@ -34,15 +34,15 @@ Static analysis in Schrift performs at least the following, for code generation 
 - Escape analysis
 - Expression normalization for easier code generation
 
-### Code generation and bytecode format
+### (Byte)code generation
 
 The VM's bytecode is a flattened, optimized representation of an Ink program. The main goal of the bytecode format is
 
 1. Take advantage of data locality to improve runtime performance.
 2. Enable instruction-level pipelining and parallelism at runtime, as much as possible.
-3. Provide a good format for code optimization
+3. Provide a good representation of the program for further optimization
 
-Schrift's bytecode is register-based and designed to be an optimized single static assignment (SSA) form of the Ink AST. Each function and expression list in Ink is compiled to a separate contiguous block of bytecode, called `Block`, to allow for incremental compilation and replacements of parts of a program during interactive evaluation of a program.
+Schrift's bytecode is register-based and designed to be an optimized single static assignment (SSA) form of the Ink AST. Each function and expression list in Ink is compiled to a separate contiguous block of bytecode, called a `Block`, to allow for incremental compilation and replacements of parts of a program during interactive evaluation of a program. An Ink program is then compiled into a flat list of `Block`s that reference each other to form a call graph.
 
 ### Optimizations
 
@@ -56,13 +56,13 @@ On the bytecode, Schrift performs at least the following optimizations.
 
 ### Schrift virtual machine
 
-The VM design is to be done, but will include the following.
+The VM design is in progress, but will include the following.
 
 - Composite values are backed by both a growable array and a hashmap, a la JavaScript and Lua.
 
 ### Runtime and garbage collection
 
-Initially, Schrift will use automatic reference counting for memory management. This is because ARC is:
+Primitive values in Schrift that never escape a stack frame are allocated locally on the stack. This makes many common use cases of local variables, like iteration indexes and temporaries, efficient. When values are assigned to composites or captured in closures, they _escape_ the local frame, and need to be heap-allocated. Initially, Schrift will use automatic reference counting for memory management on the heap. This is because ARC is:
 
 - More memory-efficient
 - Lower latency than a tracing mark-and-sweep GC
@@ -81,5 +81,4 @@ Some open questions about ARC in Rust and Schrift:
 - Syscalls should expose a generic interface for interfacing with memory-mapped hardware (?)
     - I want to be able to run Ink on a microcontroller or Raspberry Pi and control hardware peripherals like servos and LEDs directly
 - `exit()` syscall, better APIs around file descriptors so we can do things like connect pipes between child processes of `exec()`
-- Keep current concurrency model, but best-effort support for `create()` / `join()` / `send()` threading with message passing (outlined in Ink spec in main repository)
 

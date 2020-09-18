@@ -22,5 +22,7 @@ msg := 'hello'
 	(
 		log('message:')
 		log(msg)
+		log('second message:')
+		log(msg + msg + msg)
 	)
 )

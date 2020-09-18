@@ -479,7 +479,14 @@ impl Block {
                         pass_thru_names.push(name.clone());
                     }
                 }
-                for (i, name) in pass_thru_names.iter().enumerate() {
+                for name in pass_thru_names.iter() {
+                    let previous_reg = scopes.get(name).unwrap().reg;
+                    let binds_idx = exprlist_block
+                        .binds
+                        .iter()
+                        .position(|&r| r == previous_reg)
+                        .unwrap();
+
                     // codegen for a fake `name := name`
                     let right = Node::Ident(name.to_string());
                     let right_reg = self.generate_node(&right, &mut scopes, push_block)?;
@@ -487,7 +494,7 @@ impl Block {
                     // update the callee's last bind to point to the caller's correct register for
                     // the pass-thru bind variable.
                     scopes.insert(name.clone(), right_reg);
-                    let last_bind = exprlist_block.binds.get_mut(i).unwrap();
+                    let last_bind = exprlist_block.binds.get_mut(binds_idx).unwrap();
                     *last_bind = right_reg;
                 }
                 let block_idx = push_block(exprlist_block);
@@ -513,7 +520,6 @@ impl Block {
             Node::Ident(name) => match scopes.get(name) {
                 Some(lookup) => {
                     if lookup.escaped {
-                        println!("Looking up {} - {}", name, lookup.reg);
                         let bind_idx = self.binds.len();
                         self.binds.push(lookup.reg);
                         let dest = self.iota();
@@ -646,7 +652,14 @@ impl Block {
                         pass_thru_names.push(name.clone());
                     }
                 }
-                for (i, name) in pass_thru_names.iter().enumerate() {
+                for name in pass_thru_names.iter() {
+                    let previous_reg = scopes.get(name).unwrap().reg;
+                    let binds_idx = func_block
+                        .binds
+                        .iter()
+                        .position(|&r| r == previous_reg)
+                        .unwrap();
+
                     // codegen for a fake `name := name`
                     let right = Node::Ident(name.to_string());
                     let right_reg = self.generate_node(&right, &mut scopes, push_block)?;
@@ -654,7 +667,7 @@ impl Block {
                     // update the callee's last bind to point to the caller's correct register for
                     // the pass-thru bind variable.
                     scopes.insert(name.clone(), right_reg);
-                    let last_bind = func_block.binds.get_mut(i).unwrap();
+                    let last_bind = func_block.binds.get_mut(binds_idx).unwrap();
                     *last_bind = right_reg;
                 }
                 let block_idx = push_block(func_block);

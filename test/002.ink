@@ -9,7 +9,7 @@ log(first + second + first + second)
 
 add3 := (n) => (
 	x := 1 + 2 + n
-	n
+	x
 )
 log('should say 6:')
 log(add3(3))

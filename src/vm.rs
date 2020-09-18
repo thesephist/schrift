@@ -70,12 +70,19 @@ impl Vm {
     }
 
     fn is_running(&self) -> bool {
+        if self.stack.len() > 0 {
+            return true;
+        }
+        return false;
+    }
+
+    fn should_pop_frame(&self) -> bool {
         if self.stack.len() == 0 {
             return false;
         }
 
-        let top_frame = self.stack.last().unwrap();
-        return top_frame.ip < top_frame.block.code.len();
+        let frame = self.stack.last().unwrap();
+        return frame.ip == frame.block.code.len();
     }
 
     pub fn run(&mut self) -> Result<(), InkErr> {
@@ -243,13 +250,15 @@ impl Vm {
                     self.stack.push(callee_frame);
                 }
                 None => {
-                    if frame.ip == frame.block.code.len() {
+                    while self.should_pop_frame() {
                         // prepare return
-                        let rp = frame.rp.clone();
-                        let ret_reg = frame.block.code.last().unwrap().dest;
-                        let ret_val = frame.regs[ret_reg].clone();
+                        let top_frame = self.stack.last().unwrap();
 
+                        let rp = top_frame.rp.clone();
+                        let ret_reg = top_frame.block.code.last().unwrap().dest;
+                        let ret_val = top_frame.regs[ret_reg].clone();
                         self.stack.pop();
+
                         match self.stack.last_mut() {
                             Some(frame) => frame.regs[rp] = ret_val,
                             None => (),

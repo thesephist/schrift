@@ -11,4 +11,5 @@ log(n)
 
 (
 	log(n)
+	log(n * 2)
 )

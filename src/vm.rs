@@ -156,9 +156,15 @@ impl Vm {
                 }
                 Op::Escape(reg) => {
                     let ref_idx = self.heap.len();
-                    // TODO: if already escaped, just get the index
-                    let escaped_val = mem::replace(&mut frame.regs[reg], Val::Escaped(ref_idx));
-                    self.heap.push(escaped_val);
+                    let escaping_val = &frame.regs[reg];
+                    match escaping_val {
+                        Val::Escaped(_) => (),
+                        _ => {
+                            let escaped_val =
+                                mem::replace(&mut frame.regs[reg], Val::Escaped(ref_idx));
+                            self.heap.push(escaped_val);
+                        }
+                    }
                 }
                 Op::Call(f_reg, arg_regs) => {
                     // TODO: tail call optimization should be implemented in the VM,

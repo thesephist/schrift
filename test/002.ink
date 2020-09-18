@@ -21,3 +21,13 @@ log(sum(10, 20, 30, 40))
 log(1 * 2 + 3 / 4)
 log(~2 < 4)
 log(2 > 3)
+
+` raw variable references `
+
+a := a => a
+b := b => b
+c := c => c
+d := d => d
+
+log('Say 42:')
+log(a(b(c(d(42)))))

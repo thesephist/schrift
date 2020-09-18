@@ -1,6 +1,12 @@
 ` scratch file `
 
-Newline := char(10)
-log := x => out(string(x) + Newline)
+log := x => out(x)
 
+(
+	log('A')
+)
 
+3
+4
+5
+log('B')

@@ -85,7 +85,6 @@ impl Vm {
 
         let mut maybe_callee_frame: Option<Frame>;
 
-        // Core while-switch instruction dispatch loop
         while self.is_running() {
             maybe_callee_frame = None;
 
@@ -96,6 +95,7 @@ impl Vm {
 
             match inst.op.clone() {
                 Op::Nop => (),
+                Op::Mov(reg) => frame.regs[dest] = frame.regs[reg].or_from_heap(&self.heap).clone(),
                 Op::Neg(reg) => {
                     frame.regs[dest] = runtime::neg(frame.regs[reg].or_from_heap(&self.heap))?
                 }

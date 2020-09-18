@@ -71,6 +71,7 @@ impl Val {
 pub enum Op {
     Nop,
 
+    Mov(Reg),
     Escape(Reg),
 
     LoadConst(usize),
@@ -104,6 +105,7 @@ impl fmt::Display for Op {
         match self {
             Op::Nop => write!(f, "NOP"),
             Op::Escape(reg) => write!(f, "ESCAPE @{}", reg),
+            Op::Mov(reg) => write!(f, "MOV @{}", reg),
             Op::LoadConst(idx) => write!(f, "LOAD_CONST {}", idx),
             Op::LoadEsc(idx) => write!(f, "LOAD_ESC {}", idx),
             Op::Call(reg, args) => write!(
@@ -532,7 +534,13 @@ impl Block {
                         scopes.insert(name.clone(), dest);
                         dest
                     } else {
-                        lookup.reg
+                        let dest = self.iota();
+                        self.code.push(Inst {
+                            dest,
+                            op: Op::Mov(lookup.reg),
+                        });
+                        scopes.insert(name.clone(), dest);
+                        dest
                     }
                 }
                 None => {

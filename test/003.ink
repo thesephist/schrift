@@ -1,13 +1,14 @@
 ` scopes test `
 
-log := x => out(string(x) + char(10))
+Newline := char(10)
+log := x => out(string(x) + Newline)
 
 log('hi')
-n := (2 + 3)
+n := (() => (12))()
 log('hi')
 
-`` log(n)
+log(n)
 
-`` (
-`` 	log(n)
-`` )
+(
+	log(n)
+)

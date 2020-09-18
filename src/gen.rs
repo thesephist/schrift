@@ -169,6 +169,10 @@ impl ScopeStack {
         self.scopes.push(HashMap::new());
     }
 
+    fn pop(&mut self) {
+        self.scopes.pop();
+    }
+
     fn get(&mut self, name: &String) -> Option<RegLookup> {
         for (i, scope) in self.scopes.iter().rev().enumerate() {
             match scope.get(name) {
@@ -418,6 +422,8 @@ impl Block {
             Node::ExprList(exprs) => {
                 scopes.push();
                 let exprlist_block = Block::from_nodes(exprs.clone(), &mut scopes, push_block)?;
+                scopes.pop();
+
                 for escaped_reg in exprlist_block.binds.iter() {
                     self.code.push(Inst {
                         dest: *escaped_reg,
@@ -575,6 +581,7 @@ impl Block {
                     }
                     _ => func_block.generate_nodes(vec![*body.clone()], &mut scopes, push_block)?,
                 }
+                scopes.pop();
 
                 for escaped_reg in func_block.binds.iter() {
                     self.code.push(Inst {

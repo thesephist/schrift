@@ -152,6 +152,49 @@ impl fmt::Display for Inst {
     }
 }
 
+struct Scope<'s> {
+    vars: HashMap<String, Reg>,
+    parent: Option<&'s mut Scope<'s>>,
+}
+
+impl<'s> Scope<'s> {
+    fn new() -> Scope<'s> {
+        return Scope {
+            vars: HashMap::new(),
+            parent: None,
+        };
+    }
+
+    fn with_parent<'p>(parent_scope: &'p mut Scope<'p>) -> Scope<'p> {
+        let mut scope = Scope::new();
+        scope.parent = Some(parent_scope);
+        return scope;
+    }
+
+    fn get(&mut self, name: &String) -> Option<&Reg> {
+        // when a get() needs to cross block boundaries, move the register
+        // to self.binds.
+        return match self.vars.get(name) {
+            Some(reg) => Some(reg),
+            None => match &mut self.parent {
+                // TODO: need some way to mark that this is a closure/bound-get
+                // of an escaped var and not a local variable to the block/frame.
+                // We do this by addding the ESCAPE instruction in the parent scope
+                // against the variable's register.
+                Some(parent) => match parent.get(name) {
+                    Some(reg) => Some(reg),
+                    None => None,
+                },
+                None => None,
+            },
+        };
+    }
+
+    fn insert(&mut self, name: String, reg: Reg) -> Option<Reg> {
+        return self.vars.insert(name, reg);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Block {
     pub slots: usize,
@@ -162,7 +205,6 @@ pub struct Block {
     // integer counter to label autoincremented
     // pseudo-register allocations.
     iota: usize,
-    scope: HashMap<String, Reg>,
     parent: Option<Box<Block>>,
 }
 
@@ -181,11 +223,10 @@ impl Block {
     fn new() -> Block {
         return Block {
             slots: 0,
-            consts: Vec::new(),
-            binds: Vec::new(),
+            consts: vec![],
+            binds: vec![],
             code: vec![],
             iota: 0,
-            scope: HashMap::new(),
             parent: None,
         };
     }
@@ -201,47 +242,30 @@ impl Block {
         return self.consts.len() - 1;
     }
 
-    fn scope_get(&mut self, name: &String) -> Option<&Reg> {
-        // when a get() needs to cross block boundaries, move the register
-        // to self.binds.
-        return match self.scope.get(name) {
-            Some(reg) => Some(reg),
-            None => match &mut self.parent {
-                // TODO: need some way to mark that this is a closure/bound-get
-                // of an escaped var and not a local variable to the block/frame.
-                // We do this by addding the ESCAPE instruction in the parent scope
-                // against the variable's register.
-                Some(parent) => match parent.scope_get(name) {
-                    Some(reg) => {
-                        self.binds.push(reg.clone());
-                        Some(reg)
-                    }
-                    None => None,
-                },
-                None => None,
-            },
-        };
-    }
-
-    fn scope_insert(&mut self, name: String, reg: Reg) -> Option<Reg> {
-        return self.scope.insert(name, reg);
-    }
-
-    fn from_nodes<F>(nodes: Vec<Node>, push_block: &mut F) -> Result<Block, InkErr>
+    fn from_nodes<F>(
+        nodes: Vec<Node>,
+        scope: &mut Scope,
+        push_block: &mut F,
+    ) -> Result<Block, InkErr>
     where
         F: FnMut(Block) -> usize,
     {
         let mut block = Block::new();
-        block.generate_nodes(nodes, push_block)?;
+        block.generate_nodes(nodes, scope, push_block)?;
         return Ok(block);
     }
 
-    fn generate_nodes<F>(&mut self, nodes: Vec<Node>, push_block: &mut F) -> Result<(), InkErr>
+    fn generate_nodes<F>(
+        &mut self,
+        nodes: Vec<Node>,
+        scope: &mut Scope,
+        push_block: &mut F,
+    ) -> Result<(), InkErr>
     where
         F: FnMut(Block) -> usize,
     {
         for node in nodes.iter() {
-            self.generate_node(&node, push_block)?;
+            self.generate_node(&node, scope, push_block)?;
         }
         self.slots = self.iota;
         return Ok(());
@@ -249,13 +273,18 @@ impl Block {
 
     // returns the register at which the result of evaluating `node`
     // is stored, after executing all generated code for the given node.
-    fn generate_node<F>(&mut self, node: &Node, push_block: &mut F) -> Result<Reg, InkErr>
+    fn generate_node<F>(
+        &mut self,
+        node: &Node,
+        mut scope: &mut Scope,
+        push_block: &mut F,
+    ) -> Result<Reg, InkErr>
     where
         F: FnMut(Block) -> usize,
     {
         let result_reg = match node {
             Node::UnaryExpr { op: _, arg } => {
-                let arg_reg = self.generate_node(&arg, push_block)?;
+                let arg_reg = self.generate_node(&arg, &mut scope, push_block)?;
                 let dest = self.iota();
                 self.code.push(Inst {
                     dest,
@@ -268,7 +297,7 @@ impl Block {
                 left: define_left,
                 right: define_right,
             } => {
-                let right_reg = self.generate_node(&define_right, push_block)?;
+                let right_reg = self.generate_node(&define_right, &mut scope, push_block)?;
 
                 match *define_left.clone() {
                     Node::BinaryExpr {
@@ -276,8 +305,10 @@ impl Block {
                         left: comp_left,
                         right: comp_right,
                     } => {
-                        let comp_left_reg = self.generate_node(&comp_left, push_block)?;
-                        let comp_right_reg = self.generate_node(&comp_right, push_block)?;
+                        let comp_left_reg =
+                            self.generate_node(&comp_left, &mut scope, push_block)?;
+                        let comp_right_reg =
+                            self.generate_node(&comp_right, &mut scope, push_block)?;
 
                         let dest = self.iota();
                         self.code.push(Inst {
@@ -288,7 +319,7 @@ impl Block {
                     }
                     Node::Ident(name) => {
                         let dest = self.iota();
-                        self.scope_insert(name.clone(), dest);
+                        scope.insert(name.clone(), dest);
                         self.code.push(Inst {
                             dest,
                             op: Op::Mov(right_reg),
@@ -303,8 +334,8 @@ impl Block {
                 }
             }
             Node::BinaryExpr { op, left, right } => {
-                let left_reg = self.generate_node(&left, push_block)?;
-                let right_reg = self.generate_node(&right, push_block)?;
+                let left_reg = self.generate_node(&left, &mut scope, push_block)?;
+                let right_reg = self.generate_node(&right, &mut scope, push_block)?;
                 let dest = self.iota();
                 match op {
                     TokKind::AddOp => self.code.push(Inst {
@@ -363,10 +394,10 @@ impl Block {
                 dest
             }
             Node::FnCall { func, args } => {
-                let func_reg = self.generate_node(&func, push_block)?;
+                let func_reg = self.generate_node(&func, &mut scope, push_block)?;
                 let mut arg_regs = Vec::new();
                 for arg in args.iter() {
-                    arg_regs.push(self.generate_node(arg, push_block)?);
+                    arg_regs.push(self.generate_node(arg, &mut scope, push_block)?);
                 }
                 let dest = self.iota();
                 self.code.push(Inst {
@@ -390,7 +421,9 @@ impl Block {
                 self.iota()
             }
             Node::ExprList(exprs) => {
-                let exprlist_block = Block::from_nodes(exprs.clone(), push_block)?;
+                let mut exprlist_scope = Scope::new(); // TODO: Scope::with_parent(&mut scope);
+                let exprlist_block =
+                    Block::from_nodes(exprs.clone(), &mut exprlist_scope, push_block)?;
                 let block_idx = push_block(exprlist_block);
 
                 let closure_dest = self.iota();
@@ -411,7 +444,7 @@ impl Block {
                 self.code.push(Inst { dest, op: Op::Nop });
                 dest
             }
-            Node::Ident(name) => match self.scope_get(name) {
+            Node::Ident(name) => match scope.get(name) {
                 Some(reg) => reg.clone(),
                 None => {
                     let dest = self.iota();
@@ -463,7 +496,7 @@ impl Block {
                 key: _key,
                 val: _val,
             } => {
-                // TODO: generate object entry insertion code
+                // TODO: panic!
                 self.iota()
             }
             Node::ObjectLiteral(entries) => {
@@ -475,8 +508,8 @@ impl Block {
                 for entry in entries.iter() {
                     match entry {
                         Node::ObjectEntry { key, val } => {
-                            let key_reg = self.generate_node(key, push_block)?;
-                            let val_reg = self.generate_node(val, push_block)?;
+                            let key_reg = self.generate_node(key, &mut scope, push_block)?;
+                            let val_reg = self.generate_node(val, &mut scope, push_block)?;
                             let entry_dest = self.iota();
                             self.code.push(Inst {
                                 dest: entry_dest,
@@ -502,7 +535,7 @@ impl Block {
                         op: Op::LoadConst(index_reg),
                     });
 
-                    let item_reg = self.generate_node(item, push_block)?;
+                    let item_reg = self.generate_node(item, &mut scope, push_block)?;
                     let item_dest = self.iota();
                     self.code.push(Inst {
                         dest: item_dest,
@@ -512,21 +545,26 @@ impl Block {
                 dest
             }
             Node::FnLiteral { args, body } => {
+                let mut func_scope = Scope::new(); // TODO: Scope::with_parent(&mut scope);
                 let mut func_block = Block::new();
                 for arg in args.iter() {
                     match arg {
                         Node::Ident(name) => {
                             let arg_reg = func_block.iota();
-                            func_block.scope.insert(name.clone(), arg_reg);
+                            func_scope.insert(name.clone(), arg_reg);
                         }
                         _ => (),
                     }
                 }
                 match &**body {
                     Node::ExprList(exprs) => {
-                        func_block.generate_nodes(exprs.to_vec(), push_block)?
+                        func_block.generate_nodes(exprs.to_vec(), &mut func_scope, push_block)?
                     }
-                    _ => func_block.generate_nodes(vec![*body.clone()], push_block)?,
+                    _ => func_block.generate_nodes(
+                        vec![*body.clone()],
+                        &mut func_scope,
+                        push_block,
+                    )?,
                 }
 
                 let block_idx = push_block(func_block);
@@ -547,7 +585,8 @@ impl Block {
 
 pub fn generate(nodes: Vec<Node>) -> Result<Vec<Block>, InkErr> {
     let mut prog = Vec::<Block>::new();
-    let main_block = Block::from_nodes(nodes, &mut |block| {
+    let mut main_scope = Scope::new();
+    let main_block = Block::from_nodes(nodes, &mut main_scope, &mut |block| {
         prog.push(block);
         return prog.len();
     })?;

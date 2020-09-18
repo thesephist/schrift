@@ -2,9 +2,12 @@
 
 log := x => out(string(x) + char(10))
 
-n := 5
-log(n)
+log('hi')
+n := (2 + 3)
+log('hi')
 
-(
-	log(n)
-)
+`` log(n)
+
+`` (
+`` 	log(n)
+`` )

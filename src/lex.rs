@@ -166,6 +166,17 @@ impl<'s> Reader<'s> {
         return self.take();
     }
 
+    fn take_until<F>(&mut self, cond: F) -> &str
+    where
+        F: Fn(char) -> bool,
+    {
+        while self.has_next() && (cond(self.peek()) || self.lookback() == '\\') {
+            self.next();
+        }
+        self.next();
+        return self.take();
+    }
+
     fn take(&self) -> &str {
         return &self.source[self.start..self.index];
     }
@@ -228,7 +239,7 @@ pub fn tokenize(prog: &str) -> Result<Vec<Tok>, InkErr> {
                     reader.next(); // second backtick
                     reader.pop_span();
 
-                    let str_content = reader.take_while(|c| c != '\n');
+                    let str_content = reader.take_until(|c| c != '\n');
                     let str_value = String::from(str_content);
                     tokens.push(reader.pop_token(TokKind::Comment(str_value)));
 

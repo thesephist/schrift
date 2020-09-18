@@ -454,9 +454,10 @@ impl Block {
                             dest,
                             op: Op::LoadEsc(bind_idx),
                         });
+                        dest
+                    } else {
+                        *lookup.reg
                     }
-
-                    *lookup.reg
                 }
                 None => {
                     let dest = self.iota();

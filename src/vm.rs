@@ -51,6 +51,15 @@ impl fmt::Display for Vm {
     }
 }
 
+impl Val {
+    pub fn or_from_heap<'v>(&'v self, heap: &'v Vec<Val>) -> &'v Val {
+        return match self {
+            Val::Escaped(heap_idx) => &heap[*heap_idx],
+            _ => self,
+        };
+    }
+}
+
 impl Vm {
     pub fn new(prog: Vec<Block>) -> Vm {
         return Vm {
@@ -67,14 +76,6 @@ impl Vm {
 
         let top_frame = self.stack.last().unwrap();
         return top_frame.ip < top_frame.block.code.len();
-    }
-
-    fn get_reg<'s>(&'s self, frame: &'s Frame, reg: Reg) -> &'s Val {
-        let val = &frame.regs[reg];
-        return match val {
-            Val::Escaped(heap_idx) => &self.heap[*heap_idx],
-            _ => val,
-        };
     }
 
     pub fn run(&mut self) -> Result<(), InkErr> {
@@ -95,23 +96,67 @@ impl Vm {
 
             match inst.op.clone() {
                 Op::Nop => (),
-                Op::Neg(reg) => frame.regs[dest] = runtime::neg(&frame.regs[reg])?,
-                Op::Mov(reg) => frame.regs[dest] = frame.regs[reg].clone(),
-                Op::Add(a, b) => frame.regs[dest] = runtime::add(&frame.regs[a], &frame.regs[b])?,
-                Op::Sub(a, b) => frame.regs[dest] = runtime::sub(&frame.regs[a], &frame.regs[b])?,
-                Op::Mul(a, b) => frame.regs[dest] = runtime::mul(&frame.regs[a], &frame.regs[b])?,
-                Op::Div(a, b) => frame.regs[dest] = runtime::div(&frame.regs[a], &frame.regs[b])?,
+                Op::Neg(reg) => {
+                    frame.regs[dest] = runtime::neg(frame.regs[reg].or_from_heap(&self.heap))?
+                }
+                Op::Mov(reg) => frame.regs[dest] = frame.regs[reg].or_from_heap(&self.heap).clone(),
+                Op::Add(a, b) => {
+                    frame.regs[dest] = runtime::add(
+                        frame.regs[a].or_from_heap(&self.heap),
+                        frame.regs[b].or_from_heap(&self.heap),
+                    )?
+                }
+                Op::Sub(a, b) => {
+                    frame.regs[dest] = runtime::sub(
+                        frame.regs[a].or_from_heap(&self.heap),
+                        frame.regs[b].or_from_heap(&self.heap),
+                    )?
+                }
+                Op::Mul(a, b) => {
+                    frame.regs[dest] = runtime::mul(
+                        frame.regs[a].or_from_heap(&self.heap),
+                        frame.regs[b].or_from_heap(&self.heap),
+                    )?
+                }
+                Op::Div(a, b) => {
+                    frame.regs[dest] = runtime::div(
+                        frame.regs[a].or_from_heap(&self.heap),
+                        frame.regs[b].or_from_heap(&self.heap),
+                    )?
+                }
                 Op::And(a, b) => {
-                    frame.regs[dest] = runtime::bin_and(&frame.regs[a], &frame.regs[b])?
+                    frame.regs[dest] = runtime::bin_and(
+                        &frame.regs[a].or_from_heap(&self.heap),
+                        &frame.regs[b].or_from_heap(&self.heap),
+                    )?
                 }
-                Op::Or(a, b) => frame.regs[dest] = runtime::bin_or(&frame.regs[a], &frame.regs[b])?,
+                Op::Or(a, b) => {
+                    frame.regs[dest] = runtime::bin_or(
+                        &frame.regs[a].or_from_heap(&self.heap),
+                        &frame.regs[b].or_from_heap(&self.heap),
+                    )?
+                }
                 Op::Xor(a, b) => {
-                    frame.regs[dest] = runtime::bin_xor(&frame.regs[a], &frame.regs[b])?
+                    frame.regs[dest] = runtime::bin_xor(
+                        &frame.regs[a].or_from_heap(&self.heap),
+                        &frame.regs[b].or_from_heap(&self.heap),
+                    )?
                 }
-                Op::Gtr(a, b) => frame.regs[dest] = runtime::gtr(&frame.regs[a], &frame.regs[b])?,
-                Op::Lss(a, b) => frame.regs[dest] = runtime::lss(&frame.regs[a], &frame.regs[b])?,
+                Op::Gtr(a, b) => {
+                    frame.regs[dest] = runtime::gtr(
+                        &frame.regs[a].or_from_heap(&self.heap),
+                        &frame.regs[b].or_from_heap(&self.heap),
+                    )?
+                }
+                Op::Lss(a, b) => {
+                    frame.regs[dest] = runtime::lss(
+                        &frame.regs[a].or_from_heap(&self.heap),
+                        &frame.regs[b].or_from_heap(&self.heap),
+                    )?
+                }
                 Op::Escape(reg) => {
                     let ref_idx = self.heap.len();
+                    // TODO: if already escaped, just get the index
                     let escaped_val = mem::replace(&mut frame.regs[reg], Val::Escaped(ref_idx));
                     self.heap.push(escaped_val);
                 }
@@ -119,20 +164,16 @@ impl Vm {
                     // TODO: tail call optimization should be implemented in the VM,
                     // not the compiler. If Op::Call is the last instruction of a Block,
                     // reuse the current stack frame position.
-                    // let callee_fn = &frame.regs[f_reg];
-                    let mut callee_fn = &frame.regs[f_reg];
-                    match callee_fn {
-                        Val::Escaped(heap_idx) => callee_fn = &self.heap[*heap_idx],
-                        _ => (),
-                    };
 
+                    let callee_fn = frame.regs[f_reg].or_from_heap(&self.heap);
                     match callee_fn {
                         Val::Func(callee_block_idx, heap_vals) => {
                             let callee_block = &self.prog[*callee_block_idx];
                             let mut callee_frame = Frame::new(dest, callee_block.clone());
 
                             for (i, arg_reg) in arg_regs.iter().enumerate() {
-                                callee_frame.regs[i] = frame.regs[arg_reg.clone()].clone();
+                                callee_frame.regs[i] =
+                                    frame.regs[*arg_reg].or_from_heap(&self.heap).clone();
                             }
 
                             for (i, val) in heap_vals.iter().enumerate() {
@@ -143,6 +184,7 @@ impl Vm {
                             maybe_callee_frame = Some(callee_frame);
                         }
                         Val::NativeFunc(func) => {
+                            // TODO: or from heap
                             let args = arg_regs
                                 .iter()
                                 .map(|reg| frame.regs[reg.clone()].clone())
@@ -150,9 +192,6 @@ impl Vm {
                             frame.regs[dest] = func(args)?;
                         }
                         _ => {
-                            println!("frame binds: {:?}", frame.binds);
-                            println!("vm heap: {:?}", self.heap);
-                            println!("fn: {:?}", callee_fn);
                             return Err(InkErr::InvalidFunctionCall);
                         }
                     }

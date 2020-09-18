@@ -1,5 +1,4 @@
 use std::fmt;
-use std::sync::Arc;
 
 use crate::err::InkErr;
 use crate::lex::TokKind;
@@ -21,7 +20,7 @@ pub enum Val {
     Bool(bool),
     Null,
     Comp(HashMap<Vec<u8>, Val>),
-    Func(usize), // usize is Block index in Vec<Block>
+    Func(usize, Vec<Val>),
     NativeFunc(NativeFn),
 
     // Val::Escaped(Arc<Val>) is a proxy value placed in registers to tell the VM that the register
@@ -33,11 +32,11 @@ pub enum Val {
     // When a variable in scope A register R is determined to have escaped by a closure with scope
     // B (or a composite), the compiler makes these changes:
     //
-    // 1. In Block A, add instruction [@R ESCAPE] which tells the VM to move the value to the VM
+    // X. In Block A, add instruction [@R ESCAPE] which tells the VM to move the value to the VM
     //    heap
-    // 2. Add a reference (TBD) to Block B's Block::bind vector that will runtime-reference
+    // X. Add a reference (TBD) to Block B's Block::bind vector that will runtime-reference
     //    register @R in A.
-    // 2. In Block B, add instruction [@? LOAD_ESC N] when loading the closed-over variable, which
+    // X. In Block B, add instruction [@? LOAD_ESC N] when loading the closed-over variable, which
     //    will pull from the runtime-created vec of heap pointers (Vec::Escaped's).
     //
     // At runtime:
@@ -45,7 +44,7 @@ pub enum Val {
     //
     // When the VM LOAD_CONST's a function literal:
     //
-    // 1. If the Val::Func's block has any closed-over variable registers in Block::bind, /clone/
+    // X. If the Val::Func's block has any closed-over variable registers in Block::bind, /clone/
     //    the Val::Func and add to it the runtime-determined Vec::Escaped's sitting in those
     //    registers. This produces a new "function object" which is the closure closing over
     //    runtime values sitting on the VM heap.
@@ -55,7 +54,7 @@ pub enum Val {
     // 1. If the Val::Func has any heap pointers in its heap pointer (closed-over variables)
     //    vector, make those Val::Escaped's (heap pointers) available in the vm::Frame in a
     //    predictable way to the frame's bytecode.
-    Escaped(Arc<Val>),
+    Escaped(usize),
 }
 
 #[allow(unused)]
@@ -74,10 +73,9 @@ pub enum Op {
     Nop,
 
     Mov(Reg),
-    Escape,
+    Escape(Reg),
 
     LoadConst(usize),
-    LoadBind(usize),
     LoadEsc(usize),
 
     Call(Reg, Vec<Reg>),
@@ -108,9 +106,8 @@ impl fmt::Display for Op {
         match self {
             Op::Nop => write!(f, "NOP"),
             Op::Mov(reg) => write!(f, "= @{}", reg),
-            Op::Escape => write!(f, "ESCAPE"),
+            Op::Escape(reg) => write!(f, "ESCAPE {}", reg),
             Op::LoadConst(idx) => write!(f, "LOAD_CONST {}", idx),
-            Op::LoadBind(idx) => write!(f, "LOAD_BIND {}", idx),
             Op::LoadEsc(idx) => write!(f, "LOAD_ESC {}", idx),
             Op::Call(reg, args) => write!(
                 f,
@@ -152,46 +149,44 @@ impl fmt::Display for Inst {
     }
 }
 
-struct Scope<'s> {
-    vars: HashMap<String, Reg>,
-    parent: Option<&'s mut Scope<'s>>,
+struct ScopeStack {
+    scopes: Vec<HashMap<String, Reg>>,
 }
 
-impl<'s> Scope<'s> {
-    fn new() -> Scope<'s> {
-        return Scope {
-            vars: HashMap::new(),
-            parent: None,
+struct RegLookup<'r> {
+    reg: &'r Reg,
+    escaped: bool,
+}
+
+impl ScopeStack {
+    fn new() -> ScopeStack {
+        return ScopeStack {
+            scopes: vec![HashMap::new()],
         };
     }
 
-    fn with_parent<'p>(parent_scope: &'p mut Scope<'p>) -> Scope<'p> {
-        let mut scope = Scope::new();
-        scope.parent = Some(parent_scope);
-        return scope;
+    fn push(&mut self) {
+        self.scopes.push(HashMap::new());
     }
 
-    fn get(&mut self, name: &String) -> Option<&Reg> {
-        // when a get() needs to cross block boundaries, move the register
-        // to self.binds.
-        return match self.vars.get(name) {
-            Some(reg) => Some(reg),
-            None => match &mut self.parent {
-                // TODO: need some way to mark that this is a closure/bound-get
-                // of an escaped var and not a local variable to the block/frame.
-                // We do this by addding the ESCAPE instruction in the parent scope
-                // against the variable's register.
-                Some(parent) => match parent.get(name) {
-                    Some(reg) => Some(reg),
-                    None => None,
-                },
-                None => None,
-            },
-        };
+    fn get(&mut self, name: &String) -> Option<RegLookup> {
+        for (i, scope) in self.scopes.iter().rev().enumerate() {
+            match scope.get(name) {
+                Some(reg) => {
+                    return Some(RegLookup {
+                        reg,
+                        escaped: i > 0,
+                    })
+                }
+                None => (),
+            };
+        }
+
+        return None;
     }
 
     fn insert(&mut self, name: String, reg: Reg) -> Option<Reg> {
-        return self.vars.insert(name, reg);
+        return self.scopes.last_mut().unwrap().insert(name, reg);
     }
 }
 
@@ -244,28 +239,28 @@ impl Block {
 
     fn from_nodes<F>(
         nodes: Vec<Node>,
-        scope: &mut Scope,
+        scopes: &mut ScopeStack,
         push_block: &mut F,
     ) -> Result<Block, InkErr>
     where
         F: FnMut(Block) -> usize,
     {
         let mut block = Block::new();
-        block.generate_nodes(nodes, scope, push_block)?;
+        block.generate_nodes(nodes, scopes, push_block)?;
         return Ok(block);
     }
 
     fn generate_nodes<F>(
         &mut self,
         nodes: Vec<Node>,
-        scope: &mut Scope,
+        scopes: &mut ScopeStack,
         push_block: &mut F,
     ) -> Result<(), InkErr>
     where
         F: FnMut(Block) -> usize,
     {
         for node in nodes.iter() {
-            self.generate_node(&node, scope, push_block)?;
+            self.generate_node(&node, scopes, push_block)?;
         }
         self.slots = self.iota;
         return Ok(());
@@ -276,7 +271,7 @@ impl Block {
     fn generate_node<F>(
         &mut self,
         node: &Node,
-        mut scope: &mut Scope,
+        mut scopes: &mut ScopeStack,
         push_block: &mut F,
     ) -> Result<Reg, InkErr>
     where
@@ -284,7 +279,7 @@ impl Block {
     {
         let result_reg = match node {
             Node::UnaryExpr { op: _, arg } => {
-                let arg_reg = self.generate_node(&arg, &mut scope, push_block)?;
+                let arg_reg = self.generate_node(&arg, &mut scopes, push_block)?;
                 let dest = self.iota();
                 self.code.push(Inst {
                     dest,
@@ -297,7 +292,7 @@ impl Block {
                 left: define_left,
                 right: define_right,
             } => {
-                let right_reg = self.generate_node(&define_right, &mut scope, push_block)?;
+                let right_reg = self.generate_node(&define_right, &mut scopes, push_block)?;
 
                 match *define_left.clone() {
                     Node::BinaryExpr {
@@ -306,9 +301,9 @@ impl Block {
                         right: comp_right,
                     } => {
                         let comp_left_reg =
-                            self.generate_node(&comp_left, &mut scope, push_block)?;
+                            self.generate_node(&comp_left, &mut scopes, push_block)?;
                         let comp_right_reg =
-                            self.generate_node(&comp_right, &mut scope, push_block)?;
+                            self.generate_node(&comp_right, &mut scopes, push_block)?;
 
                         let dest = self.iota();
                         self.code.push(Inst {
@@ -319,7 +314,7 @@ impl Block {
                     }
                     Node::Ident(name) => {
                         let dest = self.iota();
-                        scope.insert(name.clone(), dest);
+                        scopes.insert(name.clone(), dest);
                         self.code.push(Inst {
                             dest,
                             op: Op::Mov(right_reg),
@@ -334,8 +329,8 @@ impl Block {
                 }
             }
             Node::BinaryExpr { op, left, right } => {
-                let left_reg = self.generate_node(&left, &mut scope, push_block)?;
-                let right_reg = self.generate_node(&right, &mut scope, push_block)?;
+                let left_reg = self.generate_node(&left, &mut scopes, push_block)?;
+                let right_reg = self.generate_node(&right, &mut scopes, push_block)?;
                 let dest = self.iota();
                 match op {
                     TokKind::AddOp => self.code.push(Inst {
@@ -394,10 +389,10 @@ impl Block {
                 dest
             }
             Node::FnCall { func, args } => {
-                let func_reg = self.generate_node(&func, &mut scope, push_block)?;
+                let func_reg = self.generate_node(&func, &mut scopes, push_block)?;
                 let mut arg_regs = Vec::new();
                 for arg in args.iter() {
-                    arg_regs.push(self.generate_node(arg, &mut scope, push_block)?);
+                    arg_regs.push(self.generate_node(arg, &mut scopes, push_block)?);
                 }
                 let dest = self.iota();
                 self.code.push(Inst {
@@ -421,13 +416,18 @@ impl Block {
                 self.iota()
             }
             Node::ExprList(exprs) => {
-                let mut exprlist_scope = Scope::new(); // TODO: Scope::with_parent(&mut scope);
-                let exprlist_block =
-                    Block::from_nodes(exprs.clone(), &mut exprlist_scope, push_block)?;
+                scopes.push();
+                let exprlist_block = Block::from_nodes(exprs.clone(), &mut scopes, push_block)?;
+                for escaped_reg in exprlist_block.binds.iter() {
+                    self.code.push(Inst {
+                        dest: *escaped_reg,
+                        op: Op::Escape(*escaped_reg),
+                    });
+                }
                 let block_idx = push_block(exprlist_block);
 
                 let closure_dest = self.iota();
-                let const_dest = self.push_const(Val::Func(block_idx));
+                let const_dest = self.push_const(Val::Func(block_idx, vec![]));
                 self.code.push(Inst {
                     dest: closure_dest,
                     op: Op::LoadConst(const_dest),
@@ -444,8 +444,20 @@ impl Block {
                 self.code.push(Inst { dest, op: Op::Nop });
                 dest
             }
-            Node::Ident(name) => match scope.get(name) {
-                Some(reg) => reg.clone(),
+            Node::Ident(name) => match scopes.get(name) {
+                Some(lookup) => {
+                    if lookup.escaped {
+                        let bind_idx = self.binds.len();
+                        self.binds.push(*lookup.reg);
+                        let dest = self.iota();
+                        self.code.push(Inst {
+                            dest,
+                            op: Op::LoadEsc(bind_idx),
+                        });
+                    }
+
+                    *lookup.reg
+                }
                 None => {
                     let dest = self.iota();
                     let const_dest: Reg;
@@ -508,8 +520,8 @@ impl Block {
                 for entry in entries.iter() {
                     match entry {
                         Node::ObjectEntry { key, val } => {
-                            let key_reg = self.generate_node(key, &mut scope, push_block)?;
-                            let val_reg = self.generate_node(val, &mut scope, push_block)?;
+                            let key_reg = self.generate_node(key, &mut scopes, push_block)?;
+                            let val_reg = self.generate_node(val, &mut scopes, push_block)?;
                             let entry_dest = self.iota();
                             self.code.push(Inst {
                                 dest: entry_dest,
@@ -535,7 +547,7 @@ impl Block {
                         op: Op::LoadConst(index_reg),
                     });
 
-                    let item_reg = self.generate_node(item, &mut scope, push_block)?;
+                    let item_reg = self.generate_node(item, &mut scopes, push_block)?;
                     let item_dest = self.iota();
                     self.code.push(Inst {
                         dest: item_dest,
@@ -545,32 +557,34 @@ impl Block {
                 dest
             }
             Node::FnLiteral { args, body } => {
-                let mut func_scope = Scope::new(); // TODO: Scope::with_parent(&mut scope);
+                scopes.push();
                 let mut func_block = Block::new();
                 for arg in args.iter() {
                     match arg {
                         Node::Ident(name) => {
                             let arg_reg = func_block.iota();
-                            func_scope.insert(name.clone(), arg_reg);
+                            scopes.insert(name.clone(), arg_reg);
                         }
                         _ => (),
                     }
                 }
                 match &**body {
                     Node::ExprList(exprs) => {
-                        func_block.generate_nodes(exprs.to_vec(), &mut func_scope, push_block)?
+                        func_block.generate_nodes(exprs.to_vec(), &mut scopes, push_block)?
                     }
-                    _ => func_block.generate_nodes(
-                        vec![*body.clone()],
-                        &mut func_scope,
-                        push_block,
-                    )?,
+                    _ => func_block.generate_nodes(vec![*body.clone()], &mut scopes, push_block)?,
                 }
 
+                for escaped_reg in func_block.binds.iter() {
+                    self.code.push(Inst {
+                        dest: *escaped_reg,
+                        op: Op::Escape(*escaped_reg),
+                    });
+                }
                 let block_idx = push_block(func_block);
 
                 let dest = self.iota();
-                let const_dest = self.push_const(Val::Func(block_idx));
+                let const_dest = self.push_const(Val::Func(block_idx, vec![]));
                 self.code.push(Inst {
                     dest,
                     op: Op::LoadConst(const_dest),
@@ -585,8 +599,8 @@ impl Block {
 
 pub fn generate(nodes: Vec<Node>) -> Result<Vec<Block>, InkErr> {
     let mut prog = Vec::<Block>::new();
-    let mut main_scope = Scope::new();
-    let main_block = Block::from_nodes(nodes, &mut main_scope, &mut |block| {
+    let mut main_scopes = ScopeStack::new();
+    let main_block = Block::from_nodes(nodes, &mut main_scopes, &mut |block| {
         prog.push(block);
         return prog.len();
     })?;

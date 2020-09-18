@@ -1,4 +1,5 @@
 use std::fmt;
+use std::mem;
 
 use crate::err::InkErr;
 use crate::gen::{Block, Op, Reg, Val};
@@ -9,6 +10,7 @@ pub struct Frame {
     ip: usize, // instruction pointer
     rp: Reg,   // return register
     regs: Vec<Val>,
+    binds: Vec<Val>,
     block: Block,
 }
 
@@ -18,6 +20,7 @@ impl Frame {
             ip: 0,
             rp,
             regs: vec![Val::Empty; block.slots],
+            binds: vec![Val::Empty; block.binds.len()],
             block,
         };
     }
@@ -66,6 +69,14 @@ impl Vm {
         return top_frame.ip < top_frame.block.code.len();
     }
 
+    fn get_reg<'s>(&'s self, frame: &'s Frame, reg: Reg) -> &'s Val {
+        let val = &frame.regs[reg];
+        return match val {
+            Val::Escaped(heap_idx) => &self.heap[*heap_idx],
+            _ => val,
+        };
+    }
+
     pub fn run(&mut self) -> Result<(), InkErr> {
         let main_block = &self.prog.first().unwrap();
         let main_frame = Frame::new(0, (*main_block).clone());
@@ -99,18 +110,33 @@ impl Vm {
                 }
                 Op::Gtr(a, b) => frame.regs[dest] = runtime::gtr(&frame.regs[a], &frame.regs[b])?,
                 Op::Lss(a, b) => frame.regs[dest] = runtime::lss(&frame.regs[a], &frame.regs[b])?,
+                Op::Escape(reg) => {
+                    let ref_idx = self.heap.len();
+                    let escaped_val = mem::replace(&mut frame.regs[reg], Val::Escaped(ref_idx));
+                    self.heap.push(escaped_val);
+                }
                 Op::Call(f_reg, arg_regs) => {
                     // TODO: tail call optimization should be implemented in the VM,
                     // not the compiler. If Op::Call is the last instruction of a Block,
                     // reuse the current stack frame position.
-                    let callee_fn = &frame.regs[f_reg];
+                    // let callee_fn = &frame.regs[f_reg];
+                    let mut callee_fn = &frame.regs[f_reg];
                     match callee_fn {
-                        Val::Func(callee_block_idx) => {
-                            let callee_block = &self.prog[callee_block_idx.clone()];
+                        Val::Escaped(heap_idx) => callee_fn = &self.heap[*heap_idx],
+                        _ => (),
+                    };
+
+                    match callee_fn {
+                        Val::Func(callee_block_idx, heap_vals) => {
+                            let callee_block = &self.prog[*callee_block_idx];
                             let mut callee_frame = Frame::new(dest, callee_block.clone());
 
                             for (i, arg_reg) in arg_regs.iter().enumerate() {
                                 callee_frame.regs[i] = frame.regs[arg_reg.clone()].clone();
+                            }
+
+                            for (i, val) in heap_vals.iter().enumerate() {
+                                callee_frame.binds[i] = val.clone();
                             }
 
                             // queue up next stack frame
@@ -123,10 +149,34 @@ impl Vm {
                                 .collect();
                             frame.regs[dest] = func(args)?;
                         }
-                        _ => return Err(InkErr::InvalidFunctionCall),
+                        _ => {
+                            println!("frame binds: {:?}", frame.binds);
+                            println!("vm heap: {:?}", self.heap);
+                            println!("fn: {:?}", callee_fn);
+                            return Err(InkErr::InvalidFunctionCall);
+                        }
                     }
                 }
-                Op::LoadConst(idx) => frame.regs[dest] = frame.block.consts[idx].clone(),
+                Op::LoadEsc(idx) => frame.regs[dest] = frame.binds[idx].clone(),
+                Op::LoadConst(idx) => {
+                    let const_val = frame.block.consts[idx].clone();
+
+                    match const_val {
+                        Val::Func(callee_block_idx, heap_val_tmpl) => {
+                            let callee_block = &self.prog[callee_block_idx];
+                            if callee_block.binds.len() > 0 {
+                                let mut heap_vals = heap_val_tmpl.clone();
+                                for parent_reg_idx in callee_block.binds.iter() {
+                                    heap_vals.push(frame.regs[*parent_reg_idx].clone());
+                                }
+                                frame.regs[dest] = Val::Func(callee_block_idx, heap_vals);
+                            } else {
+                                frame.regs[dest] = Val::Func(callee_block_idx, vec![]);
+                            }
+                        }
+                        _ => frame.regs[dest] = const_val,
+                    }
+                }
                 _ => println!("Unknown instruction {:?}", inst),
             }
 

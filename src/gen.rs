@@ -270,7 +270,7 @@ impl Block {
             } => {
                 let right_reg = self.generate_node(&define_right, push_block)?;
 
-                match *(define_left.clone()) {
+                match *define_left.clone() {
                     Node::BinaryExpr {
                         op: TokKind::AccessorOp,
                         left: comp_left,
@@ -375,6 +375,13 @@ impl Block {
                 });
                 dest
             }
+            Node::MatchClause {
+                target: _target,
+                expr: _expr,
+            } => {
+                // TODO: must produce block per clause
+                self.iota()
+            }
             Node::MatchExpr {
                 cond: _cond,
                 clauses: _clauses,
@@ -452,6 +459,13 @@ impl Block {
                 });
                 dest
             }
+            Node::ObjectEntry {
+                key: _key,
+                val: _val,
+            } => {
+                // TODO: generate object entry insertion code
+                self.iota()
+            }
             Node::ObjectLiteral(entries) => {
                 let dest = self.iota();
                 self.code.push(Inst {
@@ -523,11 +537,6 @@ impl Block {
                     dest,
                     op: Op::LoadConst(const_dest),
                 });
-                dest
-            }
-            _ => {
-                let dest = self.iota();
-                self.code.push(Inst { dest, op: Op::Nop });
                 dest
             }
         };

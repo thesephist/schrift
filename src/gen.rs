@@ -103,7 +103,7 @@ impl fmt::Display for Op {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Op::Nop => write!(f, "NOP"),
-            Op::Escape(reg) => write!(f, "ESCAPE {}", reg),
+            Op::Escape(reg) => write!(f, "ESCAPE @{}", reg),
             Op::LoadConst(idx) => write!(f, "LOAD_CONST {}", idx),
             Op::LoadEsc(idx) => write!(f, "LOAD_ESC {}", idx),
             Op::Call(reg, args) => write!(
@@ -162,6 +162,7 @@ struct ScopeStack {
     scopes: Vec<HashMap<String, ScopeRecord>>,
 }
 
+#[derive(Debug)]
 struct RegLookup {
     reg: Reg,
     escaped: bool,
@@ -512,6 +513,7 @@ impl Block {
             Node::Ident(name) => match scopes.get(name) {
                 Some(lookup) => {
                     if lookup.escaped {
+                        println!("Looking up {} - {}", name, lookup.reg);
                         let bind_idx = self.binds.len();
                         self.binds.push(lookup.reg);
                         let dest = self.iota();
@@ -519,6 +521,9 @@ impl Block {
                             dest,
                             op: Op::LoadEsc(bind_idx),
                         });
+                        // There is now a local Val::Escaped pointing to the heap, so future
+                        // variable accesses in this scope should not LOAD_ESC
+                        scopes.insert(name.clone(), dest);
                         dest
                     } else {
                         lookup.reg

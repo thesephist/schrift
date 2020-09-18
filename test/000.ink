@@ -1,6 +1,7 @@
 ` scratch file `
 
-log := x => out(string(x) + char(10))
+Newline := char(10)
+log := x => out(string(x) + Newline)
 
 msg := 'hello'
 (

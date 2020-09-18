@@ -116,7 +116,7 @@ impl fmt::Display for Op {
                 args.iter().map(|r| format!("@{}", r)).collect::<String>()
             ),
             Op::CallIfEq(reg, a, b, jump_by) => {
-                write!(f, "CALL @{}, @{} @{}, {}", reg, a, b, jump_by)
+                write!(f, "CALL_IF_EQ @{}, @{} == @{}, {}", reg, a, b, jump_by)
             }
             Op::MakeComp => write!(f, "MAKE_COMP"),
             Op::SetComp(reg, k, v) => write!(f, "SET_COMP @{}, @{} @{}", reg, k, v),
@@ -409,15 +409,33 @@ impl Block {
                 target: _target,
                 expr: _expr,
             } => {
-                // TODO: must produce block per clause
+                // TODO: error!
                 self.iota()
             }
-            Node::MatchExpr {
-                cond: _cond,
-                clauses: _clauses,
-            } => {
-                // TODO: must produce block per clause
-                self.iota()
+            Node::MatchExpr { cond, clauses } => {
+                let cond_reg = self.generate_node(cond, &mut scopes, push_block)?;
+                let dest = self.iota();
+                for (i, clause) in clauses.iter().enumerate() {
+                    match clause {
+                        Node::MatchClause { target, expr } => {
+                            let target_reg = self.generate_node(target, &mut scopes, push_block)?;
+                            let expr_reg = self.generate_node(expr, &mut scopes, push_block)?;
+                            self.code.push(Inst {
+                                dest,
+                                op: Op::CallIfEq(
+                                    expr_reg,
+                                    cond_reg,
+                                    target_reg,
+                                    clauses.len() - i - 1,
+                                ),
+                            });
+                        }
+                        _ => {
+                            // TODO: error!
+                        }
+                    }
+                }
+                dest
             }
             Node::ExprList(exprs) => {
                 scopes.push();

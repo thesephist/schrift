@@ -124,6 +124,12 @@ impl Vm {
                         frame.regs[b].or_from_heap(&self.heap),
                     )?
                 }
+                Op::Mod(a, b) => {
+                    frame.regs[dest] = runtime::modulus(
+                        frame.regs[a].or_from_heap(&self.heap),
+                        frame.regs[b].or_from_heap(&self.heap),
+                    )?
+                }
                 Op::And(a, b) => {
                     frame.regs[dest] = runtime::bin_and(
                         &frame.regs[a].or_from_heap(&self.heap),
@@ -153,6 +159,9 @@ impl Vm {
                         &frame.regs[a].or_from_heap(&self.heap),
                         &frame.regs[b].or_from_heap(&self.heap),
                     )?
+                }
+                Op::Eql(_, _) => {
+                    println!("Unknown instruction {:?}", inst);
                 }
                 Op::Escape(reg) => {
                     let ref_idx = self.heap.len();
@@ -190,11 +199,10 @@ impl Vm {
                             maybe_callee_frame = Some(callee_frame);
                         }
                         Val::NativeFunc(func) => {
-                            // TODO: or from heap
-                            let args = arg_regs
-                                .iter()
-                                .map(|reg| frame.regs[reg.clone()].clone())
-                                .collect();
+                            let mut args = vec![Val::Empty; arg_regs.len()];
+                            for (i, arg_reg) in arg_regs.iter().enumerate() {
+                                args[i] = frame.regs[*arg_reg].or_from_heap(&self.heap).clone();
+                            }
                             frame.regs[dest] = func(args)?;
                         }
                         _ => {
@@ -222,7 +230,10 @@ impl Vm {
                         _ => frame.regs[dest] = const_val,
                     }
                 }
-                _ => println!("Unknown instruction {:?}", inst),
+                Op::CallIfEq(_, _, _, _) => println!("Unknown instruction {:?}", inst),
+                Op::MakeComp => println!("Unknown instruction {:?}", inst),
+                Op::SetComp(_, _, _) => println!("Unknown instruction {:?}", inst),
+                Op::GetComp(_, _) => println!("Unknown instruction {:?}", inst),
             }
 
             frame.ip += 1;

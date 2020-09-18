@@ -77,6 +77,18 @@ pub fn div(a: &Val, b: &Val) -> Result<Val, InkErr> {
     return Ok(result);
 }
 
+pub fn modulus(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    let result = match a {
+        Val::Number(num_a) => match b {
+            Val::Number(num_b) => Val::Number(num_a % num_b),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        _ => return Err(InkErr::InvalidOperand),
+    };
+
+    return Ok(result);
+}
+
 pub fn bin_and(a: &Val, b: &Val) -> Result<Val, InkErr> {
     let result = match a {
         Val::Number(num_a) => match b {

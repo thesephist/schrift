@@ -99,7 +99,6 @@ impl Vm {
                 Op::Neg(reg) => {
                     frame.regs[dest] = runtime::neg(frame.regs[reg].or_from_heap(&self.heap))?
                 }
-                Op::Mov(reg) => frame.regs[dest] = frame.regs[reg].or_from_heap(&self.heap).clone(),
                 Op::Add(a, b) => {
                     frame.regs[dest] = runtime::add(
                         frame.regs[a].or_from_heap(&self.heap),
@@ -206,6 +205,7 @@ impl Vm {
                             frame.regs[dest] = func(args)?;
                         }
                         _ => {
+                            println!("Invalid fn: {:?}", callee_fn);
                             return Err(InkErr::InvalidFunctionCall);
                         }
                     }

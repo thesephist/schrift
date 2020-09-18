@@ -1,11 +1,11 @@
-` exprlist `
+` scratch file `
+
+log := x => out(string(x) + char(10))
 
 msg := 'hello'
-
 (
-	`` msg := msg
 	(
-		out(msg)
+		log('message:')
+		log(msg)
 	)
 )
-

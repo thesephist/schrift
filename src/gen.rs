@@ -67,12 +67,10 @@ impl Val {
     }
 }
 
-#[allow(unused)]
 #[derive(Debug, Clone)]
 pub enum Op {
     Nop,
 
-    Mov(Reg),
     Escape(Reg),
 
     LoadConst(usize),
@@ -105,7 +103,6 @@ impl fmt::Display for Op {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Op::Nop => write!(f, "NOP"),
-            Op::Mov(reg) => write!(f, "= @{}", reg),
             Op::Escape(reg) => write!(f, "ESCAPE {}", reg),
             Op::LoadConst(idx) => write!(f, "LOAD_CONST {}", idx),
             Op::LoadEsc(idx) => write!(f, "LOAD_ESC {}", idx),
@@ -149,12 +146,24 @@ impl fmt::Display for Inst {
     }
 }
 
-struct ScopeStack {
-    scopes: Vec<HashMap<String, Reg>>,
+#[derive(PartialEq, Eq)]
+enum RegSource {
+    CurrentScope,
+    CurrentScopeEscaped,
+    ParentScopeEscaped,
 }
 
-struct RegLookup<'r> {
-    reg: &'r Reg,
+struct ScopeRecord {
+    reg: Reg,
+    source: RegSource,
+}
+
+struct ScopeStack {
+    scopes: Vec<HashMap<String, ScopeRecord>>,
+}
+
+struct RegLookup {
+    reg: Reg,
     escaped: bool,
 }
 
@@ -173,24 +182,44 @@ impl ScopeStack {
         self.scopes.pop();
     }
 
+    fn last(&self) -> &HashMap<String, ScopeRecord> {
+        return self.scopes.last().unwrap();
+    }
+
     fn get(&mut self, name: &String) -> Option<RegLookup> {
-        for (i, scope) in self.scopes.iter().rev().enumerate() {
-            match scope.get(name) {
-                Some(reg) => {
+        for (i, scope) in self.scopes.iter_mut().rev().enumerate() {
+            match scope.get_mut(name) {
+                Some(rec) if rec.source != RegSource::ParentScopeEscaped => {
+                    let escaped = i > 0;
+                    rec.source = RegSource::CurrentScopeEscaped;
                     return Some(RegLookup {
-                        reg,
-                        escaped: i > 0,
-                    })
+                        reg: rec.reg,
+                        escaped,
+                    });
                 }
-                None => (),
+                _ => {
+                    scope.insert(
+                        name.to_string(),
+                        ScopeRecord {
+                            reg: 0,
+                            source: RegSource::ParentScopeEscaped,
+                        },
+                    );
+                }
             };
         }
 
         return None;
     }
 
-    fn insert(&mut self, name: String, reg: Reg) -> Option<Reg> {
-        return self.scopes.last_mut().unwrap().insert(name, reg);
+    fn insert(&mut self, name: String, reg: Reg) {
+        self.scopes.last_mut().unwrap().insert(
+            name,
+            ScopeRecord {
+                reg,
+                source: RegSource::CurrentScope,
+            },
+        );
     }
 }
 
@@ -317,13 +346,8 @@ impl Block {
                         right_reg
                     }
                     Node::Ident(name) => {
-                        let dest = self.iota();
-                        scopes.insert(name.clone(), dest);
-                        self.code.push(Inst {
-                            dest,
-                            op: Op::Mov(right_reg),
-                        });
-                        dest
+                        scopes.insert(name.clone(), right_reg);
+                        right_reg
                     }
                     Node::EmptyIdent => right_reg,
                     _ => {
@@ -439,14 +463,31 @@ impl Block {
             }
             Node::ExprList(exprs) => {
                 scopes.push();
-                let exprlist_block = Block::from_nodes(exprs.clone(), &mut scopes, push_block)?;
+                let mut exprlist_block = Block::from_nodes(exprs.clone(), &mut scopes, push_block)?;
                 scopes.pop();
 
-                for escaped_reg in exprlist_block.binds.iter() {
-                    self.code.push(Inst {
-                        dest: *escaped_reg,
-                        op: Op::Escape(*escaped_reg),
-                    });
+                let mut pass_thru_names = Vec::<String>::new();
+                for (name, rec) in scopes.last() {
+                    if rec.source == RegSource::CurrentScopeEscaped {
+                        let escaped_reg = rec.reg;
+                        self.code.push(Inst {
+                            dest: escaped_reg,
+                            op: Op::Escape(escaped_reg),
+                        });
+                    } else if rec.source == RegSource::ParentScopeEscaped {
+                        pass_thru_names.push(name.clone());
+                    }
+                }
+                for (i, name) in pass_thru_names.iter().enumerate() {
+                    // codegen for a fake `name := name`
+                    let right = Node::Ident(name.to_string());
+                    let right_reg = self.generate_node(&right, &mut scopes, push_block)?;
+
+                    // update the callee's last bind to point to the caller's correct register for
+                    // the pass-thru bind variable.
+                    scopes.insert(name.clone(), right_reg);
+                    let last_bind = exprlist_block.binds.get_mut(i).unwrap();
+                    *last_bind = right_reg;
                 }
                 let block_idx = push_block(exprlist_block);
 
@@ -472,7 +513,7 @@ impl Block {
                 Some(lookup) => {
                     if lookup.escaped {
                         let bind_idx = self.binds.len();
-                        self.binds.push(*lookup.reg);
+                        self.binds.push(lookup.reg);
                         let dest = self.iota();
                         self.code.push(Inst {
                             dest,
@@ -480,26 +521,12 @@ impl Block {
                         });
                         dest
                     } else {
-                        *lookup.reg
+                        lookup.reg
                     }
                 }
                 None => {
-                    let dest = self.iota();
-                    let const_dest: Reg;
-                    const_dest = match name.as_str() {
-                        "out" => self.push_const(Val::NativeFunc(runtime::builtin_out)),
-                        "char" => self.push_const(Val::NativeFunc(runtime::builtin_char)),
-                        "string" => self.push_const(Val::NativeFunc(runtime::builtin_string)),
-                        _ => {
-                            println!("Could not find variable {:?} in current scope", name);
-                            return Err(InkErr::UndefinedVariable);
-                        }
-                    };
-                    self.code.push(Inst {
-                        dest,
-                        op: Op::LoadConst(const_dest),
-                    });
-                    dest
+                    println!("Could not find variable {:?} in current scope", name);
+                    return Err(InkErr::UndefinedVariable);
                 }
             },
             Node::NumberLiteral(n) => {
@@ -602,21 +629,38 @@ impl Block {
                 }
                 scopes.pop();
 
-                for escaped_reg in func_block.binds.iter() {
-                    self.code.push(Inst {
-                        dest: *escaped_reg,
-                        op: Op::Escape(*escaped_reg),
-                    });
+                let mut pass_thru_names = Vec::<String>::new();
+                for (name, rec) in scopes.last() {
+                    if rec.source == RegSource::CurrentScopeEscaped {
+                        let escaped_reg = rec.reg;
+                        self.code.push(Inst {
+                            dest: escaped_reg,
+                            op: Op::Escape(escaped_reg),
+                        });
+                    } else if rec.source == RegSource::ParentScopeEscaped {
+                        pass_thru_names.push(name.clone());
+                    }
+                }
+                for (i, name) in pass_thru_names.iter().enumerate() {
+                    // codegen for a fake `name := name`
+                    let right = Node::Ident(name.to_string());
+                    let right_reg = self.generate_node(&right, &mut scopes, push_block)?;
+
+                    // update the callee's last bind to point to the caller's correct register for
+                    // the pass-thru bind variable.
+                    scopes.insert(name.clone(), right_reg);
+                    let last_bind = func_block.binds.get_mut(i).unwrap();
+                    *last_bind = right_reg;
                 }
                 let block_idx = push_block(func_block);
 
-                let dest = self.iota();
+                let fn_dest = self.iota();
                 let const_dest = self.push_const(Val::Func(block_idx, vec![]));
                 self.code.push(Inst {
-                    dest,
+                    dest: fn_dest,
                     op: Op::LoadConst(const_dest),
                 });
-                dest
+                fn_dest
             }
         };
 
@@ -625,9 +669,26 @@ impl Block {
 }
 
 pub fn generate(nodes: Vec<Node>) -> Result<Vec<Block>, InkErr> {
+    let mut builtins: HashMap<String, NativeFn> = HashMap::new();
+    builtins.insert("out".to_string(), runtime::builtin_out);
+    builtins.insert("char".to_string(), runtime::builtin_char);
+    builtins.insert("string".to_string(), runtime::builtin_string);
+
     let mut prog = Vec::<Block>::new();
     let mut main_scopes = ScopeStack::new();
-    let main_block = Block::from_nodes(nodes, &mut main_scopes, &mut |block| {
+    let mut main_block = Block::new();
+
+    for (name, builtin_fn) in builtins {
+        let builtin_idx = main_block.push_const(Val::NativeFunc(builtin_fn));
+        let builtin_reg = main_block.iota();
+        main_block.code.push(Inst {
+            dest: builtin_reg,
+            op: Op::LoadConst(builtin_idx),
+        });
+        main_scopes.insert(name, builtin_reg);
+    }
+
+    main_block.generate_nodes(nodes, &mut main_scopes, &mut |block| {
         prog.push(block);
         return prog.len();
     })?;

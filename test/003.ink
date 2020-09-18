@@ -13,3 +13,14 @@ log(n)
 	log(n)
 	log(n * 2)
 )
+
+` closure that closes over closed-over variables
+	in an outer scope `
+
+msg := 'hello'
+(
+	(
+		log('message:')
+		log(msg)
+	)
+)

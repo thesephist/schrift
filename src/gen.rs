@@ -23,6 +23,8 @@ pub enum Val {
     Func(usize, Vec<Val>),
     NativeFunc(NativeFn),
 
+    // NOTE: Slightly outdated.
+    //
     // Val::Escaped(Arc<Val>) is a proxy value placed in registers to tell the VM that the register
     // value has been moved to the VM's heap.
     //
@@ -612,7 +614,18 @@ impl Block {
                 for entry in entries.iter() {
                     match entry {
                         Node::ObjectEntry { key, val } => {
-                            let key_reg = self.generate_node(key, &mut scopes, push_block)?;
+                            let key_reg: Reg;
+                            if let Node::Ident(key_name) = &**key {
+                                key_reg = self.iota();
+                                let const_dest =
+                                    self.push_const(Val::Str(key_name.clone().into_bytes()));
+                                self.code.push(Inst {
+                                    dest: key_reg,
+                                    op: Op::LoadConst(const_dest),
+                                });
+                            } else {
+                                key_reg = self.generate_node(key, &mut scopes, push_block)?;
+                            }
                             let val_reg = self.generate_node(val, &mut scopes, push_block)?;
                             let entry_dest = self.iota();
                             self.code.push(Inst {

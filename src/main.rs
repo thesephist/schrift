@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 mod analyze;
 mod args;
+mod comp;
 mod err;
 mod gen;
 mod lex;

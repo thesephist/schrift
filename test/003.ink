@@ -26,3 +26,21 @@ msg := 'hello'
 		log(msg + msg + msg)
 	)
 )
+
+logAThing := thing => (
+	(
+		log('logging: ' + string(thing))
+	)
+)
+
+printAThing := thing => (
+	(
+		log('printing: ' + string(thing))
+	)
+)
+
+log('10, 12, 20, 42')
+logAThing(10)
+logAThing(12)
+printAThing(20)
+printAThing(42)

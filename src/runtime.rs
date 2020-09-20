@@ -173,6 +173,10 @@ pub fn lss(a: &Val, b: &Val) -> Result<Val, InkErr> {
     return Ok(result);
 }
 
+pub fn eql(a: &Val, b: &Val) -> Result<Val, InkErr> {
+    return Ok(Val::Bool(a.eq(b)));
+}
+
 // runtime builtins
 
 pub fn builtin_out(args: Vec<Val>) -> Result<Val, InkErr> {

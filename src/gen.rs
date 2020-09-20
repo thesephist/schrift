@@ -60,14 +60,39 @@ pub enum Val {
 #[allow(unused)]
 impl Val {
     pub fn eq(&self, other: &Val) -> bool {
-        match &self {
+        match other {
             Val::Empty => true,
-            _ => false,
+            _ => match &self {
+                Val::Empty => true,
+                Val::Number(a) => {
+                    if let Val::Number(b) = other {
+                        return a == b;
+                    }
+                    return false;
+                }
+                Val::Str(a) => {
+                    if let Val::Str(b) = other {
+                        return a == b;
+                    }
+                    return false;
+                }
+                Val::Bool(a) => {
+                    if let Val::Bool(b) = other {
+                        return a == b;
+                    }
+                    return false;
+                }
+                Val::Null => match other {
+                    Val::Null => true,
+                    _ => false,
+                },
+                _ => true,
+            },
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {
     Nop,
 
@@ -330,7 +355,7 @@ impl Block {
             } => {
                 let right_reg = self.generate_node(&define_right, &mut scopes, push_block)?;
 
-                match *define_left.clone() {
+                match &**define_left {
                     Node::BinaryExpr {
                         op: TokKind::AccessorOp,
                         left: comp_left,
@@ -432,12 +457,8 @@ impl Block {
                 });
                 dest
             }
-            Node::MatchClause {
-                target: _target,
-                expr: _expr,
-            } => {
-                // TODO: error!
-                self.iota()
+            Node::MatchClause { target: _, expr: _ } => {
+                panic!("Unexpected node in compiler: Node::MatchClause")
             }
             Node::MatchExpr { cond, clauses } => {
                 let cond_reg = self.generate_node(cond, &mut scopes, push_block)?;
@@ -446,7 +467,13 @@ impl Block {
                     match clause {
                         Node::MatchClause { target, expr } => {
                             let target_reg = self.generate_node(target, &mut scopes, push_block)?;
-                            let expr_reg = self.generate_node(expr, &mut scopes, push_block)?;
+                            // branch body is implemented as a separate Block
+                            let exprlist = Node::FnLiteral {
+                                args: vec![],
+                                body: expr.clone(),
+                            };
+                            let expr_reg =
+                                self.generate_node(&exprlist, &mut scopes, push_block)?;
                             self.code.push(Inst {
                                 dest,
                                 op: Op::CallIfEq(
@@ -457,9 +484,7 @@ impl Block {
                                 ),
                             });
                         }
-                        _ => {
-                            // TODO: error!
-                        }
+                        _ => panic!("Unexpected node in compiler: non-MatchClause in MatchExpr"),
                     }
                 }
                 dest
@@ -575,12 +600,8 @@ impl Block {
                 });
                 dest
             }
-            Node::ObjectEntry {
-                key: _key,
-                val: _val,
-            } => {
-                // TODO: panic!
-                self.iota()
+            Node::ObjectEntry { key: _, val: _ } => {
+                panic!("Unexpected node in compiler: Node::ObjectEntry")
             }
             Node::ObjectLiteral(entries) => {
                 let dest = self.iota();
@@ -695,14 +716,15 @@ impl Block {
 }
 
 pub fn generate(nodes: Vec<Node>) -> Result<Vec<Block>, InkErr> {
+    let mut prog = Vec::<Block>::new();
+    let mut main_scopes = ScopeStack::new();
+    let mut main_block = Block::new();
+
+    // initialize runtime preamble
     let mut builtins: HashMap<String, NativeFn> = HashMap::new();
     builtins.insert("out".to_string(), runtime::builtin_out);
     builtins.insert("char".to_string(), runtime::builtin_char);
     builtins.insert("string".to_string(), runtime::builtin_string);
-
-    let mut prog = Vec::<Block>::new();
-    let mut main_scopes = ScopeStack::new();
-    let mut main_block = Block::new();
 
     for (name, builtin_fn) in builtins {
         let builtin_idx = main_block.push_const(Val::NativeFunc(builtin_fn));

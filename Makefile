@@ -13,9 +13,9 @@ tests:
 t: tests
 
 fmt:
-	inkfmt fix test/*.ink
+	inkfmt fix test/0*.ink
 f: fmt
 
 fmt-check:
-	inkfmt test/*.ink
+	inkfmt test/0*.ink
 fk: fmt-check

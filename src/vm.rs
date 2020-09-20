@@ -166,8 +166,11 @@ impl Vm {
                         &frame.regs[b].or_from_heap(&self.heap),
                     )?
                 }
-                Op::Eql(_, _) => {
-                    println!("Unknown instruction {:?}", inst);
+                Op::Eql(a, b) => {
+                    frame.regs[dest] = runtime::eql(
+                        &frame.regs[a].or_from_heap(&self.heap),
+                        &frame.regs[b].or_from_heap(&self.heap),
+                    )?
                 }
                 Op::Escape(reg) => {
                     let ref_idx = self.heap.len();
@@ -237,7 +240,39 @@ impl Vm {
                         _ => frame.regs[dest] = const_val,
                     }
                 }
-                Op::CallIfEq(_, _, _, _) => println!("Unknown instruction {:?}", inst),
+                Op::CallIfEq(f_reg, a_reg, b_reg, skip) => {
+                    let cmp_a = &frame.regs[a_reg].or_from_heap(&self.heap);
+                    let cmp_b = &frame.regs[b_reg].or_from_heap(&self.heap);
+                    if cmp_a.eq(&cmp_b) {
+                        let callee_fn = frame.regs[f_reg].or_from_heap(&self.heap);
+                        match callee_fn {
+                            Val::Func(callee_block_idx, heap_vals) => {
+                                let callee_block = &self.prog[*callee_block_idx];
+                                let mut callee_frame = Frame::new(dest, callee_block.clone());
+
+                                for (i, val) in heap_vals.iter().enumerate() {
+                                    callee_frame.binds[i] = val.clone();
+                                }
+
+                                // queue up next stack frame
+                                maybe_callee_frame = Some(callee_frame);
+                            }
+                            _ => {
+                                println!(
+                                    "CALL_IF_EQ jump point is not a function: {:?}",
+                                    callee_fn
+                                );
+                                return Err(InkErr::InvalidFunctionCall);
+                            }
+                        }
+
+                        for _ in 0..skip {
+                            while let Op::CallIfEq(_, _, _, _) = frame.block.code[frame.ip].op {
+                                frame.ip += 1;
+                            }
+                        }
+                    }
+                }
                 Op::MakeComp => println!("Unknown instruction {:?}", inst),
                 Op::SetComp(_, _, _) => println!("Unknown instruction {:?}", inst),
                 Op::GetComp(_, _) => println!("Unknown instruction {:?}", inst),

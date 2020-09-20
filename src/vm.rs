@@ -266,9 +266,13 @@ impl Vm {
                             }
                         }
 
+                        // `skip` tells the VM to skip the next N branches
                         for _ in 0..skip {
-                            while let Op::CallIfEq(_, _, _, _) = frame.block.code[frame.ip].op {
+                            'find_branch: loop {
                                 frame.ip += 1;
+                                if let Op::CallIfEq(_, _, _, _) = frame.block.code[frame.ip].op {
+                                    break 'find_branch;
+                                }
                             }
                         }
                     }

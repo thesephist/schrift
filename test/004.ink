@@ -10,3 +10,10 @@ log := x => out(string(x) + Newline)
 }
 
 log('branches done')
+
+log('result should be 3')
+result := (1 + 2 :: {
+	3 -> 3
+	_ -> ~10
+})
+log('result: ' + string(result))

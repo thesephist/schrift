@@ -21,7 +21,7 @@ impl Comp {
     pub fn get(&self, key: &Val) -> Val {
         return match self.map.get(&key.to_ink_string()) {
             Some(val) => val.clone(),
-            None => Val::Empty,
+            None => Val::Null,
         };
     }
 }

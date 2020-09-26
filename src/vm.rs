@@ -59,6 +59,13 @@ impl Val {
             _ => self,
         };
     }
+
+    fn or_from_heap_mut<'v>(&'v mut self, heap: &'v mut Vec<Val>) -> &'v mut Val {
+        return match self {
+            Val::Escaped(heap_idx) => &mut heap[*heap_idx],
+            _ => self,
+        };
+    }
 }
 
 impl Vm {
@@ -280,12 +287,13 @@ impl Vm {
                 }
                 Op::MakeComp => frame.regs[dest] = Val::Comp(Comp::new()),
                 Op::SetComp(comp_reg, key_reg, val_reg) => {
-                    let comp_val = frame.regs[comp_reg].or_from_heap(&self.heap);
+                    // TODO: implement for byte buffers (Val::Str's)
                     let key = frame.regs[key_reg].or_from_heap(&self.heap).clone();
                     let val = frame.regs[val_reg].or_from_heap(&self.heap).clone();
 
+                    let comp_val = frame.regs[comp_reg].or_from_heap_mut(&mut self.heap);
                     if let Val::Comp(comp) = comp_val {
-                        // TODO: comp.set(&key, val);
+                        comp.set(&key, val);
                     } else {
                         return Err(InkErr::ExpectedCompositeValue);
                     }

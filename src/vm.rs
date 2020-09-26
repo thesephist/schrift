@@ -1,6 +1,7 @@
 use std::fmt;
 use std::mem;
 
+use crate::comp::Comp;
 use crate::err::InkErr;
 use crate::gen::{Block, Op, Reg, Val};
 use crate::runtime;
@@ -52,7 +53,7 @@ impl fmt::Display for Vm {
 }
 
 impl Val {
-    pub fn or_from_heap<'v>(&'v self, heap: &'v Vec<Val>) -> &'v Val {
+    fn or_from_heap<'v>(&'v self, heap: &'v Vec<Val>) -> &'v Val {
         return match self {
             Val::Escaped(heap_idx) => &heap[*heap_idx],
             _ => self,
@@ -277,9 +278,27 @@ impl Vm {
                         }
                     }
                 }
-                Op::MakeComp => println!("Unknown instruction {:?}", inst),
-                Op::SetComp(_, _, _) => println!("Unknown instruction {:?}", inst),
-                Op::GetComp(_, _) => println!("Unknown instruction {:?}", inst),
+                Op::MakeComp => frame.regs[dest] = Val::Comp(Comp::new()),
+                Op::SetComp(comp_reg, key_reg, val_reg) => {
+                    let comp_val = frame.regs[comp_reg].or_from_heap(&self.heap);
+                    let key = frame.regs[key_reg].or_from_heap(&self.heap).clone();
+                    let val = frame.regs[val_reg].or_from_heap(&self.heap).clone();
+
+                    if let Val::Comp(comp) = comp_val {
+                        // TODO: comp.set(&key, val);
+                    } else {
+                        return Err(InkErr::ExpectedCompositeValue);
+                    }
+                }
+                Op::GetComp(comp_reg, key_reg) => {
+                    let comp = frame.regs[comp_reg].or_from_heap(&self.heap);
+                    let key = frame.regs[key_reg].or_from_heap(&self.heap);
+
+                    match comp {
+                        Val::Comp(comp_map) => frame.regs[dest] = comp_map.get(key),
+                        _ => return Err(InkErr::ExpectedCompositeValue),
+                    }
+                }
             }
 
             frame.ip += 1;

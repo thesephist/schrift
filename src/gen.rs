@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::comp::Comp;
 use crate::err::InkErr;
 use crate::lex::TokKind;
 use crate::parse::Node;
@@ -19,7 +20,7 @@ pub enum Val {
     Str(Vec<u8>),
     Bool(bool),
     Null,
-    Comp(HashMap<Vec<u8>, Val>),
+    Comp(Comp),
     Func(usize, Vec<Val>),
     NativeFunc(NativeFn),
 
@@ -92,6 +93,24 @@ impl Val {
             },
         }
     }
+
+    pub fn to_ink_string(&self) -> String {
+        match self {
+            Val::Empty => "_".to_string(),
+            Val::Number(n) => format!("{}", n),
+            Val::Str(a) => String::from_utf8_lossy(a).into_owned(),
+            Val::Bool(a) => {
+                if *a {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                }
+            }
+            Val::Null => "()".to_string(),
+            Val::Func(_, _) | Val::NativeFunc(_) => "(function)".to_string(),
+            _ => panic!("Tried to convert unknown Ink value to string"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,7 +165,7 @@ impl fmt::Display for Op {
             }
             Op::MakeComp => write!(f, "MAKE_COMP"),
             Op::SetComp(reg, k, v) => write!(f, "SET_COMP @{}, @{} @{}", reg, k, v),
-            Op::GetComp(reg, k) => write!(f, "SET_COMP @{}, @{}", reg, k),
+            Op::GetComp(reg, k) => write!(f, "GET_COMP @{}, @{}", reg, k),
             Op::Neg(reg) => write!(f, "~ @{}", reg),
             Op::Add(a, b) => write!(f, "@{} + @{}", a, b),
             Op::Sub(a, b) => write!(f, "@{} - @{}", a, b),
@@ -365,8 +384,12 @@ impl Block {
                     } => {
                         let comp_left_reg =
                             self.generate_node(&comp_left, &mut scopes, push_block)?;
-                        let comp_right_reg =
-                            self.generate_node(&comp_right, &mut scopes, push_block)?;
+                        let comp_right_reg = if let Node::Ident(name) = &**comp_right {
+                            let right_as_str = Node::StringLiteral(name.clone());
+                            self.generate_node(&right_as_str, &mut scopes, push_block)?
+                        } else {
+                            self.generate_node(&comp_right, &mut scopes, push_block)?
+                        };
 
                         let dest = self.iota();
                         self.code.push(Inst {
@@ -385,6 +408,25 @@ impl Block {
                         return Err(InkErr::InvalidAssignment);
                     }
                 }
+            }
+            Node::BinaryExpr {
+                op: TokKind::AccessorOp,
+                left: access_left,
+                right: access_right,
+            } => {
+                let left_reg = self.generate_node(&access_left, &mut scopes, push_block)?;
+                let right_reg = if let Node::Ident(name) = &**access_right {
+                    let right_as_str = Node::StringLiteral(name.clone());
+                    self.generate_node(&right_as_str, &mut scopes, push_block)?
+                } else {
+                    self.generate_node(&access_right, &mut scopes, push_block)?
+                };
+                let dest = self.iota();
+                self.code.push(Inst {
+                    dest,
+                    op: Op::GetComp(left_reg, right_reg),
+                });
+                dest
             }
             Node::BinaryExpr { op, left, right } => {
                 let left_reg = self.generate_node(&left, &mut scopes, push_block)?;
@@ -434,10 +476,6 @@ impl Block {
                     TokKind::XorOp => self.code.push(Inst {
                         dest,
                         op: Op::Xor(left_reg, right_reg),
-                    }),
-                    TokKind::AccessorOp => self.code.push(Inst {
-                        dest,
-                        op: Op::GetComp(left_reg, right_reg),
                     }),
                     _ => {
                         println!("Cannot compile binary op {:?}", op);
@@ -616,13 +654,8 @@ impl Block {
                         Node::ObjectEntry { key, val } => {
                             let key_reg: Reg;
                             if let Node::Ident(key_name) = &**key {
-                                key_reg = self.iota();
-                                let const_dest =
-                                    self.push_const(Val::Str(key_name.clone().into_bytes()));
-                                self.code.push(Inst {
-                                    dest: key_reg,
-                                    op: Op::LoadConst(const_dest),
-                                });
+                                let key_node = Node::StringLiteral(key_name.clone());
+                                key_reg = self.generate_node(&key_node, &mut scopes, push_block)?;
                             } else {
                                 key_reg = self.generate_node(key, &mut scopes, push_block)?;
                             }

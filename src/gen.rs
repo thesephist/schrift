@@ -288,6 +288,11 @@ impl ScopeStack {
 pub struct Block {
     pub slots: usize,
     pub consts: Vec<Val>,
+
+    // binds_names is a list of names closed over
+    // used to link registers to those names in a parent scope.
+    // Escaped names should appear in binds_names and binds in corresponding order.
+    pub binds_names: Vec<String>,
     pub binds: Vec<Reg>,
     pub code: Vec<Inst>,
 
@@ -320,6 +325,7 @@ impl Block {
         return Block {
             slots: 0,
             consts: vec![],
+            binds_names: vec![],
             binds: vec![],
             code: vec![],
             iota: 0,
@@ -566,11 +572,10 @@ impl Block {
                     }
                 }
                 for name in pass_thru_names.iter() {
-                    let previous_reg = scopes.get(name).unwrap().reg;
                     let binds_idx = exprlist_block
-                        .binds
+                        .binds_names
                         .iter()
-                        .position(|&r| r == previous_reg)
+                        .position(|nm| nm == name)
                         .unwrap();
 
                     // codegen for a fake `name := name`
@@ -607,6 +612,7 @@ impl Block {
                 Some(lookup) => {
                     if lookup.escaped {
                         let bind_idx = self.binds.len();
+                        self.binds_names.push(name.clone());
                         self.binds.push(lookup.reg);
                         let dest = self.iota();
                         self.code.push(Inst {
@@ -747,11 +753,10 @@ impl Block {
                     }
                 }
                 for name in pass_thru_names.iter() {
-                    let previous_reg = scopes.get(name).unwrap().reg;
                     let binds_idx = func_block
-                        .binds
+                        .binds_names
                         .iter()
-                        .position(|&r| r == previous_reg)
+                        .position(|nm| nm == name)
                         .unwrap();
 
                     // codegen for a fake `name := name`

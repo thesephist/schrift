@@ -21,3 +21,11 @@ log(list.3)
 log(obj.a)
 log(obj.('b'))
 log(obj.('' + 'c'))
+
+` test list map set `
+list.2 := 'second-set'
+obj.d := 'edited-d'
+
+log(list.(1 + 1))
+log(obj.d)
+

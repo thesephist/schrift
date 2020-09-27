@@ -37,6 +37,7 @@ printAThing := thing => (
 	(
 		log('printing: ' + string(thing))
 	)
+	log('again: ' + string(thing))
 )
 
 log('10, 12, 20, 42')

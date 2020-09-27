@@ -60,6 +60,18 @@ pub enum Val {
     Escaped(usize),
 }
 
+impl fmt::Display for Val {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Val::Empty | Val::Number(_) | Val::Bool(_) | Val::Null => {
+                write!(f, "{}", self.to_ink_string().replace("'", "\\'"))
+            }
+            Val::Str(_) => write!(f, "\'{}\'", self.to_ink_string()),
+            _ => write!(f, "{:?}", self),
+        }
+    }
+}
+
 #[allow(unused)]
 impl Val {
     pub fn eq(&self, other: &Val) -> bool {
@@ -287,7 +299,14 @@ pub struct Block {
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "consts: {:?}", self.consts)?;
+        write!(f, "consts: [")?;
+        for (i, c) in self.consts.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", c)?
+        }
+        writeln!(f, "]")?;
         writeln!(f, "binds: {:?}", self.binds)?;
         for inst in self.code.iter() {
             writeln!(f, "  {}", inst)?;

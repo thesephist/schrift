@@ -838,6 +838,7 @@ pub fn generate(nodes: Vec<Node>) -> Result<Vec<Block>, InkErr> {
     builtins.insert("out".to_string(), runtime::builtin_out);
     builtins.insert("char".to_string(), runtime::builtin_char);
     builtins.insert("string".to_string(), runtime::builtin_string);
+    builtins.insert("len".to_string(), runtime::builtin_len);
 
     for (name, builtin_fn) in builtins {
         let builtin_idx = main_block.push_const(Val::NativeFunc(builtin_fn));

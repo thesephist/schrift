@@ -73,7 +73,7 @@ impl Vm {
         return Vm {
             heap: Vec::<Val>::new(),
             stack: Vec::<Frame>::new(),
-            prog: prog,
+            prog,
         };
     }
 

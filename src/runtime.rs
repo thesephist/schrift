@@ -222,3 +222,18 @@ pub fn builtin_string(args: Vec<Val>) -> Result<Val, InkErr> {
 
     return Ok(Val::Str(ink_str_bytes));
 }
+
+pub fn builtin_len(args: Vec<Val>) -> Result<Val, InkErr> {
+    if args.len() < 1 {
+        return Err(InkErr::NotEnoughArguments);
+    }
+
+    let arg = &args[0];
+    let length = match &arg {
+        Val::Str(s) => s.len(),
+        Val::Comp(comp) => comp.len(),
+        _ => return Err(InkErr::InvalidArguments),
+    };
+
+    return Ok(Val::Number(length as f64));
+}

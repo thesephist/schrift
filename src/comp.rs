@@ -25,4 +25,8 @@ impl Comp {
             None => Val::Null,
         };
     }
+
+    pub fn len(&self) -> usize {
+        return self.map.len();
+    }
 }

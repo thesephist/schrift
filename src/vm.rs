@@ -110,6 +110,7 @@ impl Vm {
 
             match inst.op.clone() {
                 Op::Nop => (),
+                // TODO: if frame.regs[dest] is a heap var, assign to heap var.
                 Op::Mov(reg) => frame.regs[dest] = frame.regs[reg].or_from_heap(&self.heap).clone(),
                 Op::Neg(reg) => {
                     frame.regs[dest] = runtime::neg(frame.regs[reg].or_from_heap(&self.heap))?
@@ -187,7 +188,7 @@ impl Vm {
                         Val::Escaped(_) => (),
                         _ => {
                             let escaped_val =
-                                mem::replace(&mut frame.regs[reg], Val::Escaped(ref_idx));
+                                mem::replace(&mut frame.regs[dest], Val::Escaped(ref_idx));
                             self.heap.push(escaped_val);
                         }
                     }

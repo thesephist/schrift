@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::gen::Val;
 #[derive(Debug, Clone)]
 pub struct Comp {
+    // TODO: wrap in Arc<_> to be shared across registers without copy
     map: HashMap<String, Val>,
 }
 

@@ -206,26 +206,16 @@ impl fmt::Display for Inst {
     }
 }
 
-#[derive(PartialEq, Eq)]
-enum RegSource {
-    CurrentScope,
-    CurrentScopeEscaped,
-    ParentScopeEscaped,
-}
-
+#[derive(Debug, Clone)]
 struct ScopeRecord {
     reg: Reg,
-    source: RegSource,
+    from_current_scope: bool,
+    forward_decl: bool,
+    escaped: bool,
 }
 
 struct ScopeStack {
     scopes: Vec<HashMap<String, ScopeRecord>>,
-}
-
-#[derive(Debug)]
-struct RegLookup {
-    reg: Reg,
-    escaped: bool,
 }
 
 impl ScopeStack {
@@ -247,23 +237,29 @@ impl ScopeStack {
         return self.scopes.last().unwrap();
     }
 
-    fn get(&mut self, name: &String) -> Option<RegLookup> {
+    fn get(&mut self, name: &String) -> Option<ScopeRecord> {
         for (i, scope) in self.scopes.iter_mut().rev().enumerate() {
             match scope.get_mut(name) {
-                Some(rec) if rec.source != RegSource::ParentScopeEscaped => {
+                Some(rec) if rec.from_current_scope => {
                     let escaped = i > 0;
-                    rec.source = RegSource::CurrentScopeEscaped;
-                    return Some(RegLookup {
+                    if escaped {
+                        rec.escaped = true;
+                    }
+                    return Some(ScopeRecord {
                         reg: rec.reg,
-                        escaped,
+                        from_current_scope: i == 0,
+                        forward_decl: rec.forward_decl,
+                        escaped: rec.escaped,
                     });
                 }
                 _ => {
                     scope.insert(
                         name.to_string(),
                         ScopeRecord {
-                            reg: 0,
-                            source: RegSource::ParentScopeEscaped,
+                            reg: 0, // dummy reg
+                            from_current_scope: false,
+                            forward_decl: false,
+                            escaped: true,
                         },
                     );
                 }
@@ -278,7 +274,21 @@ impl ScopeStack {
             name,
             ScopeRecord {
                 reg,
-                source: RegSource::CurrentScope,
+                from_current_scope: true,
+                forward_decl: false,
+                escaped: false,
+            },
+        );
+    }
+
+    fn forward_declare(&mut self, name: String, reg: Reg) {
+        self.scopes.last_mut().unwrap().insert(
+            name,
+            ScopeRecord {
+                reg,
+                from_current_scope: true,
+                forward_decl: true,
+                escaped: false,
             },
         );
     }
@@ -366,6 +376,19 @@ impl Block {
     where
         F: FnMut(Block) -> usize,
     {
+        // hoisted (forward) declarations for this scope
+        for node in nodes.iter() {
+            if let Node::BinaryExpr {
+                op: TokKind::DefineOp,
+                left: define_left,
+                right: _,
+            } = node
+            {
+                if let Node::Ident(name) = &**define_left {
+                    scopes.forward_declare(name.clone(), self.iota());
+                }
+            }
+        }
         for node in nodes.iter() {
             self.generate_node(&node, scopes, push_block)?;
         }
@@ -423,10 +446,25 @@ impl Block {
                         });
                         right_reg
                     }
-                    Node::Ident(name) => {
-                        scopes.insert(name.clone(), right_reg);
-                        right_reg
-                    }
+                    Node::Ident(name) => match scopes.get(name) {
+                        Some(rec) => {
+                            self.code.push(Inst {
+                                dest: rec.reg,
+                                op: Op::Mov(right_reg),
+                            });
+                            scopes.insert(name.clone(), rec.reg);
+                            rec.reg
+                        }
+                        // We expect all name bindings to be forward-declared
+                        // at the top of this scope's codegen.
+                        None => {
+                            println!(
+                                "Could not find forward-declared \"{:?}\" in current scope",
+                                name
+                            );
+                            return Err(InkErr::UndefinedVariable);
+                        }
+                    },
                     Node::EmptyIdent => right_reg,
                     _ => {
                         println!("Invalid assignment expression: {:?}", node);
@@ -561,13 +599,16 @@ impl Block {
 
                 let mut pass_thru_names = Vec::<String>::new();
                 for (name, rec) in scopes.last() {
-                    if rec.source == RegSource::CurrentScopeEscaped {
-                        let escaped_reg = rec.reg;
+                    if !rec.escaped {
+                        continue;
+                    }
+
+                    if rec.from_current_scope {
                         self.code.push(Inst {
-                            dest: escaped_reg,
-                            op: Op::Escape(escaped_reg),
+                            dest: rec.reg,
+                            op: Op::Escape(rec.reg),
                         });
-                    } else if rec.source == RegSource::ParentScopeEscaped {
+                    } else {
                         pass_thru_names.push(name.clone());
                     }
                 }
@@ -610,10 +651,17 @@ impl Block {
             }
             Node::Ident(name) => match scopes.get(name) {
                 Some(lookup) => {
-                    if lookup.escaped {
+                    if lookup.from_current_scope {
+                        self.code.push(Inst {
+                            dest: lookup.reg,
+                            op: Op::Nop,
+                        });
+                        lookup.reg
+                    } else {
                         let bind_idx = self.binds.len();
                         self.binds_names.push(name.clone());
                         self.binds.push(lookup.reg);
+
                         let dest = self.iota();
                         self.code.push(Inst {
                             dest,
@@ -623,18 +671,10 @@ impl Block {
                         // variable accesses in this scope should not LOAD_ESC
                         scopes.insert(name.clone(), dest);
                         dest
-                    } else {
-                        let dest = self.iota();
-                        self.code.push(Inst {
-                            dest,
-                            op: Op::Mov(lookup.reg),
-                        });
-                        scopes.insert(name.clone(), dest);
-                        dest
                     }
                 }
                 None => {
-                    println!("Could not find variable {:?} in current scope", name);
+                    println!("Could not find \"{:?}\" in current scope", name);
                     return Err(InkErr::UndefinedVariable);
                 }
             },
@@ -742,13 +782,16 @@ impl Block {
 
                 let mut pass_thru_names = Vec::<String>::new();
                 for (name, rec) in scopes.last() {
-                    if rec.source == RegSource::CurrentScopeEscaped {
-                        let escaped_reg = rec.reg;
+                    if !rec.escaped {
+                        continue;
+                    }
+
+                    if rec.from_current_scope {
                         self.code.push(Inst {
-                            dest: escaped_reg,
-                            op: Op::Escape(escaped_reg),
+                            dest: rec.reg,
+                            op: Op::Escape(rec.reg),
                         });
-                    } else if rec.source == RegSource::ParentScopeEscaped {
+                    } else {
                         pass_thru_names.push(name.clone());
                     }
                 }

@@ -214,14 +214,10 @@ pub fn builtin_string(args: Vec<Val>) -> Result<Val, InkErr> {
         return Err(InkErr::NotEnoughArguments);
     }
 
-    let out_arg = &args[0];
-    let ink_str_bytes = match &out_arg {
+    let arg = &args[0];
+    let ink_str_bytes = match &arg {
         Val::Str(s) => s.clone(),
-        Val::Number(n) => n.to_string().as_bytes().to_vec(),
-        Val::Empty => "_".to_string().as_bytes().to_vec(),
-        Val::Bool(v) => v.to_string().as_bytes().to_vec(),
-        Val::Null => "()".as_bytes().to_vec(),
-        _ => return Err(InkErr::Unimplemented),
+        _ => arg.to_ink_string().as_bytes().to_vec(),
     };
 
     return Ok(Val::Str(ink_str_bytes));

@@ -11,3 +11,15 @@ fib := n => n :: {
 }
 
 out('Naive solution: '), log(fib(10))
+
+log('Sequence, tail recursive...')
+
+Max := 30
+(sub := (a, b, n) => n :: {
+	0 -> log(b)
+	_ -> (
+		out(string(b) + ', ')
+		sub(b, a + b, n - 1)
+	)
+})(0, 1, Max)
+

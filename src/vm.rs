@@ -110,8 +110,17 @@ impl Vm {
 
             match inst.op.clone() {
                 Op::Nop => (),
-                // TODO: if frame.regs[dest] is a heap var, assign to heap var.
-                Op::Mov(reg) => frame.regs[dest] = frame.regs[reg].or_from_heap(&self.heap).clone(),
+                Op::Mov(reg) => {
+                    // MOV respects heap value status. i.e. if the destination
+                    // register is a heap pointer, it will update the value
+                    // sitting on the heap rather than updating the pointer itself.
+                    if let Val::Escaped(heap_idx) = frame.regs[dest] {
+                        let mut moved_val = frame.regs[reg].or_from_heap(&self.heap).clone();
+                        mem::swap(self.heap.get_mut(heap_idx).unwrap(), &mut moved_val);
+                    } else {
+                        frame.regs[dest] = frame.regs[reg].or_from_heap(&self.heap).clone();
+                    }
+                }
                 Op::Neg(reg) => {
                     frame.regs[dest] = runtime::neg(frame.regs[reg].or_from_heap(&self.heap))?
                 }

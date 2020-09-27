@@ -674,7 +674,7 @@ impl Block {
                     }
                 }
                 None => {
-                    println!("Could not find \"{:?}\" in current scope", name);
+                    println!("Could not find \"{}\" in current scope", name);
                     return Err(InkErr::UndefinedVariable);
                 }
             },

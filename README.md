@@ -23,7 +23,7 @@ I chose Rust for Schrift for two reasons. First, I wanted to learn Rust, and thi
 
 ## Usage
 
-Because Schrift is currently under development, there aren't any built binaries you can download. To try Schrift, You'll need to build the Rust codebase from source.
+Because Schrift is currently under development, there aren't any built binaries you can download. To try Schrift, You'll need to build the project from source.
 
 Clone the repository and open the project
 
@@ -80,7 +80,37 @@ Notably, this step would be an ideal place to perform any normalization of expre
 
 The compiler transforms the AST into a series of bytecode blocks that link together into a format executable by the Ink virtual machine.
 
-Schrift's bytecode is register-based and designed to be an optimized single static assignment (SSA) form of the program. Each function and expression list (block) in Ink is compiled to a separate contiguous block of bytecode, called a `Block`, to allow for incremental compilation and replacements of parts of a program in a repl. An Ink program is then compiled into a flat list of `Block`s that reference each other to form a call graph.
+Schrift's bytecode is register-based and designed to be an optimized single static assignment (SSA) form of the program. Each function and expression list (block) in Ink is compiled to a separate contiguous block of bytecode, called a `Block`, to allow for incremental compilation and replacements of parts of a program in a repl. An Ink program is then compiled into a flat list of `Block`s that reference each other to form a call graph. Here's a sample `Block` from the Fibonacci sequence sample (`test/007.ink`), with annotations. You can produce this output by running Schrift with the `--debug-compile` flag.
+
+```
+#5                  # this is Block #5 in the program
+
+consts: [           # constants used in this block
+    0,              # number constant
+    Func(2, []),    # Funcs are other blocks we can jump to
+    1,
+    Func(3, []),
+    Func(4, [])
+]
+
+binds: [6]          # implementation detail for closures,
+                    # references a parent scope's register
+  @0    NOP
+  @2    LOAD_CONST 0        # load constant from constant pool
+  @3    LOAD_CONST 1
+  @1    CALL_IF_EQ @3, @0 == @2, 2
+                    # CALL_IF_EQ is the only branching
+                    # construct in Schrift. It calls a closure
+                    # if two register values are equal.
+  @4    LOAD_CONST 2
+  @5    LOAD_CONST 3
+  @1    CALL_IF_EQ @5, @0 == @4, 1
+  @6    NOP
+  @0    ESCAPE @0           # escape stack value to vm heap
+  @7    LOAD_ESC 0          # load escaped value to stack
+  @8    LOAD_CONST 4
+  @1    CALL_IF_EQ @8, @0 == @6, 0
+```
 
 The `Block` is the atomic unit of control flow in Ink. Code cam jump ahead in a `Block`, but all other control flow is achieved through direct calls of other `Block`s in the code.
 
@@ -100,7 +130,7 @@ In the future, I'd also like the optimizer to perform:
 - Common subexpression elimination
 - Dead branch / code elimination
 
-Notably, at the moment, [inlining](https://en.wikipedia.org/wiki/Inline_expansion) optimizations are currently out of scope. This is because the bytecode format lacks a
+Notably, at the moment, [inlining](https://en.wikipedia.org/wiki/Inline_expansion) optimizations are currently out of scope. This is because the bytecode format lacks a general backward jump instruction that we need to implement a non-tail-recursive loop.
 
 ### Schrift virtual machine `vm.rs`
 

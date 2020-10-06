@@ -85,8 +85,8 @@ fn set_on_bytestring(s: &mut Vec<u8>, key: &Val, val: Val) -> Result<(), InkErr>
     }
 
     // ensure backing string buffer is large enough
-    if s.len() < appendee.len() {
-        let mut filler = vec![0; appendee.len() - s.len()];
+    if s.len() < index + appendee.len() {
+        let mut filler = vec![0; index + appendee.len() - s.len()];
         s.append(&mut filler);
     }
     // mutating vec internaly

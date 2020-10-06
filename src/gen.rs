@@ -444,7 +444,7 @@ impl Block {
                             dest,
                             op: Op::SetComp(comp_left_reg, comp_right_reg, right_reg),
                         });
-                        right_reg
+                        comp_left_reg
                     }
                     Node::Ident(name) => match scopes.get(name) {
                         Some(rec) => {

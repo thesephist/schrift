@@ -52,6 +52,61 @@ impl fmt::Display for Vm {
     }
 }
 
+// Coerce an Ink value into a usize when possible to index into a byte string
+fn index_coerce(key: &Val) -> Result<usize, InkErr> {
+    return match key {
+        Val::Number(n) => Ok(*n as usize),
+        Val::Str(s) => {
+            let as_string = match String::from_utf8(s.to_owned()) {
+                Ok(str) => str,
+                Err(_) => return Err(InkErr::ExpectedIntegerIndex),
+            };
+            match as_string.parse::<usize>() {
+                Ok(index) => Ok(index),
+                Err(_) => Err(InkErr::ExpectedIntegerIndex),
+            }
+        }
+        _ => Err(InkErr::ExpectedIntegerIndex),
+    };
+}
+
+fn set_on_bytestring(s: &mut Vec<u8>, key: &Val, val: Val) -> Result<(), InkErr> {
+    let index = index_coerce(key)?;
+    let mut appendee = match val {
+        Val::Str(s) => s,
+        _ => return Err(InkErr::ExpectedString),
+    };
+
+    if index > s.len() {
+        return Err(InkErr::IndexOutOfBounds);
+    }
+    if index == s.len() {
+        s.append(&mut appendee);
+    }
+
+    // ensure backing string buffer is large enough
+    if s.len() < appendee.len() {
+        let mut filler = vec![0; appendee.len() - s.len()];
+        s.append(&mut filler);
+    }
+    // mutating vec internaly
+    for i in 0..appendee.len() {
+        s[index + i] = appendee[i];
+    }
+
+    return Ok(());
+}
+
+fn get_from_bytestring(s: &Vec<u8>, key: &Val) -> Result<Val, InkErr> {
+    let index = index_coerce(key)?;
+    if index > s.len() {
+        return Ok(Val::Null);
+    }
+
+    let char_u8 = s[index];
+    return Ok(Val::Str(vec![char_u8]));
+}
+
 impl Val {
     fn or_from_heap<'v>(&'v self, heap: &'v Vec<Val>) -> &'v Val {
         return match self {
@@ -297,13 +352,14 @@ impl Vm {
                 }
                 Op::MakeComp => frame.regs[dest] = Val::Comp(Comp::new()),
                 Op::SetComp(comp_reg, key_reg, val_reg) => {
-                    // TODO: implement for byte buffers (Val::Str's)
                     let key = frame.regs[key_reg].or_from_heap(&self.heap).clone();
                     let val = frame.regs[val_reg].or_from_heap(&self.heap).clone();
 
                     let comp_val = frame.regs[comp_reg].or_from_heap_mut(&mut self.heap);
                     if let Val::Comp(comp) = comp_val {
                         comp.set(&key, val);
+                    } else if let Val::Str(s) = comp_val {
+                        set_on_bytestring(s, &key, val)?;
                     } else {
                         return Err(InkErr::ExpectedCompositeValue);
                     }
@@ -314,6 +370,7 @@ impl Vm {
 
                     match comp {
                         Val::Comp(comp_map) => frame.regs[dest] = comp_map.get(key),
+                        Val::Str(s) => frame.regs[dest] = get_from_bytestring(s, key)?,
                         _ => return Err(InkErr::ExpectedCompositeValue),
                     }
                 }

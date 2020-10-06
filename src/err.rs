@@ -20,4 +20,7 @@ pub enum InkErr {
     InvalidArguments,
     NotEnoughArguments,
     IOError,
+    ExpectedIntegerIndex,
+    IndexOutOfBounds,
+    ExpectedString,
 }

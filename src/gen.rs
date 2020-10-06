@@ -760,7 +760,6 @@ impl Block {
                 dest
             }
             Node::FnLiteral { args, body } => {
-                // TODO: hoist function/closure declarations
                 scopes.push();
                 let mut func_block = Block::new();
                 for arg in args.iter() {

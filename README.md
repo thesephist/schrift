@@ -2,7 +2,7 @@
 
 **Schrift** is an experimental runtime for the [Ink programming language](https://github.com/thesephist/ink), focused on performance and observability.
 
-Schrift is currently ⚠️ **under development** ⚠️. Many parts of the runtime are not working yet. Specifically, Schrift currently lacks correct implementations of byte string mutations, the module system, most system interfaces, and an event loop. Schrift also doesn't implement a repl yet.
+Schrift is currently ⚠️ **under development** ⚠️. Many parts of the runtime are not working yet. Specifically, Schrift currently lacks an implementation of the module system, most system interfaces, and an event loop. Schrift also doesn't implement a repl yet.
 
 ## Motivation
 

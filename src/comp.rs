@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
-use crate::gen::Val;
+use crate::val::Val;
+
 #[derive(Debug, Clone)]
 pub struct Comp {
-    // TODO: wrap in Arc<_> to be shared across registers without copy
     map: HashMap<String, Val>,
 }
 
-#[allow(unused)]
 impl Comp {
     pub fn new() -> Comp {
         return Comp {

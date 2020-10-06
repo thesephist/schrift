@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 use crate::err::InkErr;
-use crate::gen::Val;
+use crate::val::Val;
 
 pub fn neg(v: &Val) -> Result<Val, InkErr> {
     let result = match v {

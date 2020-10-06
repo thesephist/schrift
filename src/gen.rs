@@ -1,129 +1,14 @@
 use std::fmt;
 
-use crate::comp::Comp;
 use crate::err::InkErr;
 use crate::lex::TokKind;
 use crate::parse::Node;
 use crate::runtime;
+use crate::val::{NativeFn, Val};
 
 use std::collections::HashMap;
 
 pub type Reg = usize;
-
-pub type NativeFn = fn(Vec<Val>) -> Result<Val, InkErr>;
-
-#[allow(unused)]
-#[derive(Debug, Clone)]
-pub enum Val {
-    Empty,
-    Number(f64),
-    Str(Vec<u8>),
-    Bool(bool),
-    Null,
-    Comp(Comp),
-    Func(usize, Vec<Val>),
-    NativeFunc(NativeFn),
-
-    // NOTE: Slightly outdated.
-    //
-    // Val::Escaped(Arc<Val>) is a proxy value placed in registers to tell the VM that the register
-    // value has been moved to the VM's heap.
-    //
-    // At compile time:
-    // ===============
-    //
-    // When a variable in scope A register R is determined to have escaped by a closure with scope
-    // B (or a composite), the compiler makes these changes:
-    //
-    // X. In Block A, add instruction [@R ESCAPE] which tells the VM to move the value to the VM
-    //    heap
-    // X. Add a reference (TBD) to Block B's Block::bind vector that will runtime-reference
-    //    register @R in A.
-    // X. In Block B, add instruction [@? LOAD_ESC N] when loading the closed-over variable, which
-    //    will pull from the runtime-created vec of heap pointers (Vec::Escaped's).
-    //
-    // At runtime:
-    // ===========
-    //
-    // When the VM LOAD_CONST's a function literal:
-    //
-    // X. If the Val::Func's block has any closed-over variable registers in Block::bind, /clone/
-    //    the Val::Func and add to it the runtime-determined Vec::Escaped's sitting in those
-    //    registers. This produces a new "function object" which is the closure closing over
-    //    runtime values sitting on the VM heap.
-    //
-    // When the VM CALL's a Val::Func:
-    //
-    // 1. If the Val::Func has any heap pointers in its heap pointer (closed-over variables)
-    //    vector, make those Val::Escaped's (heap pointers) available in the vm::Frame in a
-    //    predictable way to the frame's bytecode.
-    Escaped(usize),
-}
-
-impl fmt::Display for Val {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Val::Empty | Val::Number(_) | Val::Bool(_) | Val::Null => {
-                write!(f, "{}", self.to_ink_string().replace("'", "\\'"))
-            }
-            Val::Str(_) => write!(f, "\'{}\'", self.to_ink_string()),
-            _ => write!(f, "{:?}", self),
-        }
-    }
-}
-
-#[allow(unused)]
-impl Val {
-    pub fn eq(&self, other: &Val) -> bool {
-        match other {
-            Val::Empty => true,
-            _ => match &self {
-                Val::Empty => true,
-                Val::Number(a) => {
-                    if let Val::Number(b) = other {
-                        return a == b;
-                    }
-                    return false;
-                }
-                Val::Str(a) => {
-                    if let Val::Str(b) = other {
-                        return a == b;
-                    }
-                    return false;
-                }
-                Val::Bool(a) => {
-                    if let Val::Bool(b) = other {
-                        return a == b;
-                    }
-                    return false;
-                }
-                Val::Null => match other {
-                    Val::Null => true,
-                    _ => false,
-                },
-                _ => true,
-            },
-        }
-    }
-
-    pub fn to_ink_string(&self) -> String {
-        match self {
-            Val::Empty => "_".to_string(),
-            Val::Number(n) => format!("{}", n),
-            Val::Str(a) => String::from_utf8_lossy(a).into_owned(),
-            Val::Bool(a) => {
-                if *a {
-                    "true".to_string()
-                } else {
-                    "false".to_string()
-                }
-            }
-            Val::Null => "()".to_string(),
-            Val::Func(_, _) | Val::NativeFunc(_) => "(function)".to_string(),
-            _ => panic!("Tried to convert unknown Ink value to string"),
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {

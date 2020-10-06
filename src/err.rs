@@ -1,4 +1,3 @@
-#[allow(unused)]
 #[derive(Debug)]
 pub enum InkErr {
     // lexer errors

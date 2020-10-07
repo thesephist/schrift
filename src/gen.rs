@@ -478,56 +478,66 @@ impl Block {
                 dest
             }
             Node::ExprList(exprs) => {
-                scopes.push();
-                let mut exprlist_block = Block::from_nodes(exprs.clone(), &mut scopes, push_block)?;
-                scopes.pop();
+                if exprs.len() == 0 {
+                    let dest = self.iota();
+                    let const_dest = self.push_const(Val::Null);
+                    self.code.push(Inst{
+                        dest,
+                        op: Op::LoadConst(const_dest),
+                    });
+                    dest
+                } else {
+                    scopes.push();
+                    let mut exprlist_block = Block::from_nodes(exprs.clone(), &mut scopes, push_block)?;
+                    scopes.pop();
 
-                let mut pass_thru_names = Vec::<String>::new();
-                for (name, rec) in scopes.last() {
-                    if !rec.escaped {
-                        continue;
+                    let mut pass_thru_names = Vec::<String>::new();
+                    for (name, rec) in scopes.last() {
+                        if !rec.escaped {
+                            continue;
+                        }
+
+                        if rec.from_current_scope {
+                            self.code.push(Inst {
+                                dest: rec.reg,
+                                op: Op::Escape(rec.reg),
+                            });
+                        } else {
+                            pass_thru_names.push(name.clone());
+                        }
                     }
+                    for name in pass_thru_names.iter() {
+                        let binds_idx = exprlist_block
+                            .binds_names
+                            .iter()
+                            .position(|nm| nm == name)
+                            .unwrap();
 
-                    if rec.from_current_scope {
-                        self.code.push(Inst {
-                            dest: rec.reg,
-                            op: Op::Escape(rec.reg),
-                        });
-                    } else {
-                        pass_thru_names.push(name.clone());
+                        // codegen for a fake `name := name`
+                        let right = Node::Ident(name.to_string());
+                        let right_reg = self.generate_node(&right, &mut scopes, push_block)?;
+
+                        // update the callee's last bind to point to the caller's correct register for
+                        // the pass-thru bind variable.
+                        scopes.insert(name.clone(), right_reg);
+                        let last_bind = exprlist_block.binds.get_mut(binds_idx).unwrap();
+                        *last_bind = right_reg;
                     }
+                    let block_idx = push_block(exprlist_block);
+
+                    let closure_dest = self.iota();
+                    let const_dest = self.push_const(Val::Func(block_idx, vec![]));
+                    self.code.push(Inst {
+                        dest: closure_dest,
+                        op: Op::LoadConst(const_dest),
+                    });
+                    let call_dest = self.iota();
+                    self.code.push(Inst {
+                        dest: call_dest,
+                        op: Op::Call(closure_dest, Vec::new()),
+                    });
+                    call_dest
                 }
-                for name in pass_thru_names.iter() {
-                    let binds_idx = exprlist_block
-                        .binds_names
-                        .iter()
-                        .position(|nm| nm == name)
-                        .unwrap();
-
-                    // codegen for a fake `name := name`
-                    let right = Node::Ident(name.to_string());
-                    let right_reg = self.generate_node(&right, &mut scopes, push_block)?;
-
-                    // update the callee's last bind to point to the caller's correct register for
-                    // the pass-thru bind variable.
-                    scopes.insert(name.clone(), right_reg);
-                    let last_bind = exprlist_block.binds.get_mut(binds_idx).unwrap();
-                    *last_bind = right_reg;
-                }
-                let block_idx = push_block(exprlist_block);
-
-                let closure_dest = self.iota();
-                let const_dest = self.push_const(Val::Func(block_idx, vec![]));
-                self.code.push(Inst {
-                    dest: closure_dest,
-                    op: Op::LoadConst(const_dest),
-                });
-                let call_dest = self.iota();
-                self.code.push(Inst {
-                    dest: call_dest,
-                    op: Op::Call(closure_dest, Vec::new()),
-                });
-                call_dest
             }
             Node::EmptyIdent => {
                 let dest = self.iota();
@@ -657,7 +667,12 @@ impl Block {
                     }
                 }
                 match &**body {
-                    Node::ExprList(exprs) => {
+                    Node::ExprList(exprs) => if exprs.len() == 0 {
+                        // special case for _ => () which should be generated as
+                        // _ => (()) (null value expression list), because we don't have an AST
+                        // representation of the null () constant.
+                        func_block.generate_nodes(vec![Node::ExprList(vec![])], &mut scopes, push_block)?
+                    } else{
                         func_block.generate_nodes(exprs.to_vec(), &mut scopes, push_block)?
                     }
                     _ => func_block.generate_nodes(vec![*body.clone()], &mut scopes, push_block)?,

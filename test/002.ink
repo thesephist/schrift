@@ -28,6 +28,10 @@ a := a => a
 b := b => b
 c := c => c
 d := d => d
+e := () => ()
+f := f => (())
 
 log('Say 42:')
 log(a(b(c(d(42)))))
+log(e())
+log(f())

@@ -92,6 +92,7 @@ impl Val {
                     Val::Null => true,
                     _ => false,
                 },
+                // TODO: implement for Val::Comp
                 _ => true,
             },
         }
@@ -111,7 +112,8 @@ impl Val {
             }
             Val::Null => "()".to_string(),
             Val::Func(_, _) | Val::NativeFunc(_) => "(function)".to_string(),
-            _ => panic!("Tried to convert unknown Ink value to string"),
+            // TODO: to_ink_string(Val::Comp)
+            _ => panic!("Tried to convert unknown Ink value {:?} to string", self),
         }
     }
 

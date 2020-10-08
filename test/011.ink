@@ -39,3 +39,21 @@ b.val := 'B'
 printNode(a)
 printNode(b)
 printNode(b.next)
+
+` Mutating comps from parent scope,
+	closed over and passed as argument `
+
+log('Expected: hi, hello, hello world')
+
+S := ['hi']
+log(S.0)
+
+(() => (
+	S.0 := 'hello'
+))()
+log(S.0)
+
+((S) => (
+	S.0 := 'hello world'
+))(S)
+log(S.0)

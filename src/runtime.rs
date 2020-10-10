@@ -231,7 +231,7 @@ pub fn builtin_len(args: Vec<Val>) -> Result<Val, InkErr> {
     let arg = &args[0];
     let length = match &arg {
         Val::Str(s) => s.len(),
-        Val::Comp(comp) => comp.len(),
+        Val::Comp(comp_rc) => comp_rc.borrow().len(),
         _ => return Err(InkErr::InvalidArguments),
     };
 

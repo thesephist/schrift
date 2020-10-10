@@ -1,4 +1,6 @@
 use std::fmt;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use crate::comp::Comp;
 use crate::err::InkErr;
@@ -12,12 +14,7 @@ pub enum Val {
     Str(Vec<u8>),
     Bool(bool),
     Null,
-    // TODO: Comp(Comp) needs to be Comp(Arc<Comp>) because multiple register values possibly
-    // across frames should be able to refer to the same Comp value -- Val::Comp is passed by
-    // reference in a way no other value, including Val::Str, is. A uniquely owned HashMap can't
-    // emulate that which means argument passing and MOV instructions currently clone the entire
-    // hashmap, which is incorrect and slow.
-    Comp(Comp),
+    Comp(Rc<RefCell<Comp>>),
     Func(usize, Vec<Val>),
     NativeFunc(NativeFn),
 

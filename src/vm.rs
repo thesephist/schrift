@@ -1,5 +1,7 @@
 use std::fmt;
 use std::mem;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use crate::comp::Comp;
 use crate::err::InkErr;
@@ -296,14 +298,14 @@ impl Vm {
                         }
                     }
                 }
-                Op::MakeComp => frame.regs[dest] = Val::Comp(Comp::new()),
+                Op::MakeComp => frame.regs[dest] = Val::Comp(Rc::new(RefCell::new(Comp::new()))),
                 Op::SetComp(comp_reg, key_reg, val_reg) => {
                     let key = frame.regs[key_reg].or_from_heap(&self.heap).clone();
                     let val = frame.regs[val_reg].or_from_heap(&self.heap).clone();
 
                     let comp_val = frame.regs[comp_reg].or_from_heap_mut(&mut self.heap);
-                    if let Val::Comp(comp) = comp_val {
-                        comp.set(&key, val);
+                    if let Val::Comp(comp_rc) = comp_val {
+                        comp_rc.borrow_mut().set(&key, val);
                     } else if let Val::Str(s) = comp_val {
                         crate::val::set_on_bytestring(s, &key, val)?;
                     } else {
@@ -315,7 +317,10 @@ impl Vm {
                     let key = frame.regs[key_reg].or_from_heap(&self.heap);
 
                     match comp {
-                        Val::Comp(comp_map) => frame.regs[dest] = comp_map.get(key),
+                        Val::Comp(comp_rc) => {
+                            let get = comp_rc.borrow().get(key);
+                            frame.regs[dest] = get;
+                        }
                         Val::Str(s) => frame.regs[dest] = crate::val::get_from_bytestring(s, key)?,
                         _ => return Err(InkErr::ExpectedCompositeValue),
                     }

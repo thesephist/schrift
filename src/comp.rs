@@ -4,9 +4,6 @@ use crate::val::Val;
 
 #[derive(Debug, Clone)]
 pub struct Comp {
-    // TODO: map needs to be Arc<HashMap> because multiple register values possibly across frames
-    // should be able to refer to the same Comp value, and a uniquely owned HashMap can't emulate
-    // that which means argument passing and MOV instructions currently clone the entire hashmap.
     map: HashMap<String, Val>,
 }
 

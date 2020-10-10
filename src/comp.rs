@@ -28,4 +28,21 @@ impl Comp {
     pub fn len(&self) -> usize {
         return self.map.len();
     }
+
+    pub fn eq(&self, other: &Comp) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+
+        for (k, v) in &self.map {
+            match other.map.get(&*k) {
+                Some(ov) => if !v.eq(ov) {
+                    return false;
+                },
+                None => return false
+            }
+        }
+
+        return true;
+    }
 }

@@ -14,6 +14,8 @@ tests:
 	$(DEBUG) test/008.ink
 	$(DEBUG) test/009.ink
 	$(DEBUG) test/010.ink
+	$(DEBUG) test/011.ink
+	$(DEBUG) test/012.ink
 t: tests
 
 fmt:

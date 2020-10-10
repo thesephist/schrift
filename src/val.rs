@@ -94,7 +94,14 @@ impl Val {
                     Val::Null => true,
                     _ => false,
                 },
-                // TODO: implement for Val::Comp
+                Val::Comp(comp_a_rc) => match other {
+                    Val::Comp(comp_b_rc) => {
+                        let comp_a = comp_a_rc.borrow();
+                        let comp_b = comp_b_rc.borrow();
+                        return (*comp_a).eq(&comp_b);
+                    }
+                    _ => false,
+                }
                 _ => true,
             },
         }

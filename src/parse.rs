@@ -346,7 +346,7 @@ impl<'s> Parser<'s> {
 
                 return Ok(Node::ListLiteral(items));
             }
-            _ => return Err(InkErr::Unimplemented),
+            _ => return Err(InkErr::UnexpectedToken),
         }
 
         // bounds check here because parse_expr may have consumed all tokens before this

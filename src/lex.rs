@@ -141,7 +141,7 @@ impl<'s> Reader<'s> {
 
     fn pop_token(&mut self, kind: TokKind) -> Tok<'s> {
         return Tok {
-            kind: kind,
+            kind,
             span: self.pop_span(),
             source: self.source,
         };
@@ -150,7 +150,7 @@ impl<'s> Reader<'s> {
     fn pop_token_and_next(&mut self, kind: TokKind) -> Tok<'s> {
         self.next();
         return Tok {
-            kind: kind,
+            kind,
             span: self.pop_span(),
             source: self.source,
         };
@@ -334,6 +334,9 @@ pub fn tokenize(prog: &str) -> Result<Vec<Tok>, InkErr> {
             }
         }
     }
+
+    // parser expects all token streams to end with a separator
+    ensure_separator(&mut tokens, &mut reader);
 
     return Ok(tokens);
 }

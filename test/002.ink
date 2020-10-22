@@ -35,3 +35,17 @@ log('Say 42:')
 log(a(b(c(d(42)))))
 log(e())
 log(f())
+
+` to_ink_string() impls `
+
+log('Log a complex composite')
+comp := {
+	vec: [1, '2', (), [4, 5]]
+	c: {
+		a: 'A'
+		2: 'B'
+	}
+	0: 1
+	1: 2
+}
+log(comp)

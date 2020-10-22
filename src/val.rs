@@ -1,6 +1,6 @@
+use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 use crate::comp::Comp;
 use crate::err::InkErr;
@@ -57,11 +57,8 @@ pub enum Val {
 impl fmt::Display for Val {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Val::Empty | Val::Number(_) | Val::Bool(_) | Val::Null => {
-                write!(f, "{}", self.to_ink_string().replace("'", "\\'"))
-            }
-            Val::Str(_) => write!(f, "\'{}\'", self.to_ink_string()),
-            _ => write!(f, "{:?}", self),
+            Val::Str(_) => write!(f, "\'{}\'", self.to_ink_string().replace("'", "\\'")),
+            _ => write!(f, "{}", self.to_ink_string()),
         }
     }
 }
@@ -101,7 +98,7 @@ impl Val {
                         return (*comp_a).eq(&comp_b);
                     }
                     _ => false,
-                }
+                },
                 _ => true,
             },
         }
@@ -121,8 +118,26 @@ impl Val {
             }
             Val::Null => "()".to_string(),
             Val::Func(_, _) | Val::NativeFunc(_) => "(function)".to_string(),
-            // TODO: to_ink_string(Val::Comp)
-            _ => panic!("Tried to convert unknown Ink value {:?} to string", self),
+            Val::Comp(comp_rc) => {
+                let mut first = false;
+                let mut s = "{".to_owned();
+
+                let comp = comp_rc.borrow();
+                for (key, val) in &comp.map {
+                    if first {
+                        s.push_str(", ");
+                    } else {
+                        first = true;
+                    }
+                    s.push_str(&format!("{}: {}", key, val));
+                }
+                s.push_str("}");
+                s
+            }
+            Val::Escaped(i) => panic!(
+                "Cannot convert invalid Ink value (heap ptr) at index {} to string",
+                i
+            ),
         }
     }
 

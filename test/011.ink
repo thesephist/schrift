@@ -5,10 +5,6 @@ log := x => out(string(x) + Newline)
 
 ` object definition `
 
-` TODO: blocked on two issues / bugs:
-	1. Val::eq comparison impl for Val::Comp (currently always returns true)
-	2. Val::Comp's HashMap should be wrapped in a shared Rc pointer, not owned/cloned `
-
 Node := val => (
 	obj := {
 		val: val

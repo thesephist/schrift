@@ -4,7 +4,7 @@ use crate::val::Val;
 
 #[derive(Debug, Clone)]
 pub struct Comp {
-    map: HashMap<String, Val>,
+    pub map: HashMap<String, Val>,
 }
 
 impl Comp {
@@ -36,10 +36,12 @@ impl Comp {
 
         for (k, v) in &self.map {
             match other.map.get(&*k) {
-                Some(ov) => if !v.eq(ov) {
-                    return false;
-                },
-                None => return false
+                Some(ov) => {
+                    if !v.eq(ov) {
+                        return false;
+                    }
+                }
+                None => return false,
             }
         }
 

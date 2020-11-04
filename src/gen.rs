@@ -481,14 +481,15 @@ impl Block {
                 if exprs.len() == 0 {
                     let dest = self.iota();
                     let const_dest = self.push_const(Val::Null);
-                    self.code.push(Inst{
+                    self.code.push(Inst {
                         dest,
                         op: Op::LoadConst(const_dest),
                     });
                     dest
                 } else {
                     scopes.push();
-                    let mut exprlist_block = Block::from_nodes(exprs.clone(), &mut scopes, push_block)?;
+                    let mut exprlist_block =
+                        Block::from_nodes(exprs.clone(), &mut scopes, push_block)?;
                     scopes.pop();
 
                     let mut pass_thru_names = Vec::<String>::new();
@@ -667,13 +668,19 @@ impl Block {
                     }
                 }
                 match &**body {
-                    Node::ExprList(exprs) => if exprs.len() == 0 {
-                        // special case for _ => () which should be generated as
-                        // _ => (()) (null value expression list), because we don't have an AST
-                        // representation of the null () constant.
-                        func_block.generate_nodes(vec![Node::ExprList(vec![])], &mut scopes, push_block)?
-                    } else{
-                        func_block.generate_nodes(exprs.to_vec(), &mut scopes, push_block)?
+                    Node::ExprList(exprs) => {
+                        if exprs.len() == 0 {
+                            // special case for _ => () which should be generated as
+                            // _ => (()) (null value expression list), because we don't have an AST
+                            // representation of the null () constant.
+                            func_block.generate_nodes(
+                                vec![Node::ExprList(vec![])],
+                                &mut scopes,
+                                push_block,
+                            )?
+                        } else {
+                            func_block.generate_nodes(exprs.to_vec(), &mut scopes, push_block)?
+                        }
                     }
                     _ => func_block.generate_nodes(vec![*body.clone()], &mut scopes, push_block)?,
                 }

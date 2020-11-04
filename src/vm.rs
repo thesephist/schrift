@@ -1,7 +1,7 @@
+use std::cell::RefCell;
 use std::fmt;
 use std::mem;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 use crate::comp::Comp;
 use crate::err::InkErr;

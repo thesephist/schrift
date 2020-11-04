@@ -9,6 +9,8 @@ use crate::gen::{Block, Op, Reg};
 use crate::runtime;
 use crate::val::Val;
 
+const MAX_STACK_FRAMES: usize = 10000;
+
 #[derive(Debug)]
 pub struct Frame {
     ip: usize, // instruction pointer
@@ -105,6 +107,12 @@ impl Vm {
 
         while self.is_running() {
             maybe_callee_frame = None;
+
+            // artificial stack overflow limit
+            if self.stack.len() == MAX_STACK_FRAMES {
+                eprintln!("Stack limit {} exceeded.", MAX_STACK_FRAMES);
+                std::process::exit(2);
+            }
 
             let frame = self.stack.last_mut().unwrap();
 
@@ -206,10 +214,6 @@ impl Vm {
                     }
                 }
                 Op::Call(f_reg, arg_regs) => {
-                    // TODO: tail call optimization should be implemented in the VM,
-                    // not the compiler. If Op::Call is the last instruction of a Block,
-                    // reuse the current stack frame position.
-
                     let callee_fn = frame.regs[f_reg].or_from_heap(&self.heap);
                     match callee_fn {
                         Val::Func(callee_block_idx, heap_vals) => {
@@ -330,7 +334,12 @@ impl Vm {
             frame.ip += 1;
 
             match maybe_callee_frame {
-                Some(callee_frame) => {
+                Some(mut callee_frame) => {
+                    while self.should_pop_frame() {
+                        // carry over return pointer
+                        let top_frame = self.stack.pop().unwrap();
+                        callee_frame.rp = top_frame.rp;
+                    }
                     self.stack.push(callee_frame);
                 }
                 None => {
@@ -338,7 +347,7 @@ impl Vm {
                         // prepare return
                         let top_frame = self.stack.last().unwrap();
 
-                        let rp = top_frame.rp.clone();
+                        let rp = top_frame.rp;
                         let ret_reg = top_frame.block.code.last().unwrap().dest;
                         let ret_val = top_frame.regs[ret_reg].clone();
                         self.stack.pop();

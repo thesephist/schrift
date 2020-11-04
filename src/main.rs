@@ -1,6 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
+
 mod analyze;
 mod args;
 mod comp;
@@ -35,9 +38,9 @@ fn print_help() {
 
 fn run_eval(mode: args::EvalMode, opts: args::Opts) {
     let result = match mode {
-        args::EvalMode::RunFile(path) => eval_file(path, opts),
-        args::EvalMode::Eval(prog) => eval_string(prog, opts),
-        args::EvalMode::Repl => Ok(println!("repl")),
+        args::EvalMode::RunFile(path) => eval_file(path, &opts),
+        args::EvalMode::Eval(prog) => eval_string(prog, &opts),
+        args::EvalMode::Repl => eval_repl(&opts),
     };
 
     match result {
@@ -46,7 +49,7 @@ fn run_eval(mode: args::EvalMode, opts: args::Opts) {
     }
 }
 
-fn eval_file(path: PathBuf, opts: args::Opts) -> Result<(), err::InkErr> {
+fn eval_file(path: PathBuf, opts: &args::Opts) -> Result<val::Val, err::InkErr> {
     let file = match fs::read_to_string(path) {
         Ok(prog) => prog,
         Err(e) => {
@@ -58,7 +61,48 @@ fn eval_file(path: PathBuf, opts: args::Opts) -> Result<(), err::InkErr> {
     return eval_string(file, opts);
 }
 
-fn eval_string(prog: String, opts: args::Opts) -> Result<(), err::InkErr> {
+fn eval_repl(opts: &args::Opts) -> Result<val::Val, err::InkErr> {
+    let mut rl = Editor::<()>::new();
+
+    let repl_do = |prog: String| -> Result<val::Val, err::InkErr> {
+        let optimized_blocks = compile(prog, opts)?;
+        return eval_blocks(optimized_blocks);
+    };
+
+    loop {
+        match rl.readline("ink/ ") {
+            Ok(line) => {
+                let read_str = line.as_str();
+
+                rl.add_history_entry(read_str);
+                match repl_do(read_str.to_owned()) {
+                    Ok(ret_val) => {
+                        println!("{}", ret_val);
+                    }
+                    Err(e) => {
+                        eprintln!("{:?}", e);
+                    }
+                }
+            }
+            Err(ReadlineError::Interrupted) => {
+                println!("interrupted.");
+                break;
+            }
+            Err(ReadlineError::Eof) => {
+                println!("eof.");
+                break;
+            }
+            Err(err) => {
+                println!("readline error: {:?}", err);
+                break;
+            }
+        }
+    }
+
+    return Ok(val::Val::Null);
+}
+
+fn compile(prog: String, opts: &args::Opts) -> Result<Vec<gen::Block>, err::InkErr> {
     let tokens = lex::tokenize(&prog)?;
     if opts.debug_lex {
         println!(":: Tokens ::");
@@ -99,6 +143,15 @@ fn eval_string(prog: String, opts: args::Opts) -> Result<(), err::InkErr> {
         }
     }
 
-    let mut machine = vm::Vm::new(optimized_blocks);
+    return Ok(optimized_blocks);
+}
+
+fn eval_string(prog: String, opts: &args::Opts) -> Result<val::Val, err::InkErr> {
+    let optimized_blocks = compile(prog, opts)?;
+    return eval_blocks(optimized_blocks);
+}
+
+fn eval_blocks(blocks: Vec<gen::Block>) -> Result<val::Val, err::InkErr> {
+    let mut machine = vm::Vm::new(blocks);
     return machine.run();
 }

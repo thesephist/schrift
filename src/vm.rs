@@ -98,7 +98,7 @@ impl Vm {
         return frame.ip == frame.block.code.len();
     }
 
-    pub fn run(&mut self) -> Result<(), InkErr> {
+    pub fn run(&mut self) -> Result<Val, InkErr> {
         let main_block = &self.prog.first().unwrap();
         let main_frame = Frame::new(0, (*main_block).clone());
         self.stack.push(main_frame);
@@ -354,13 +354,13 @@ impl Vm {
 
                         match self.stack.last_mut() {
                             Some(frame) => frame.regs[rp] = ret_val,
-                            None => (),
+                            None => return Ok(ret_val),
                         }
                     }
                 }
             }
         }
 
-        return Ok(());
+        return Ok(Val::Null);
     }
 }

@@ -100,7 +100,7 @@ impl<'s> Parser<'s> {
     }
 
     fn guard_eof(&self) -> Result<(), InkErr> {
-        if self.idx > self.tokens.len() {
+        if self.idx >= self.tokens.len() {
             return Err(InkErr::UnexpectedEOF);
         } else {
             return Ok(());

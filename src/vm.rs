@@ -354,7 +354,7 @@ impl Vm {
 
                         match self.stack.last_mut() {
                             Some(frame) => frame.regs[rp] = ret_val,
-                            None => return Ok(ret_val),
+                            None => return Ok(ret_val.or_from_heap(&self.heap).clone()),
                         }
                     }
                 }

@@ -89,10 +89,43 @@ pub fn modulus(a: &Val, b: &Val) -> Result<Val, InkErr> {
     return Ok(result);
 }
 
+// zero-extend a given Vec<u8> (backing vector of a Val::Str)
+// to be used in binary bitwise operations on byte strings
+fn zero_extend(v: &Vec<u8>, max: usize) -> Vec<u8> {
+    let mut extended: Vec<u8> = vec![0; max];
+    for (i, b) in v.iter().enumerate() {
+        extended[i] = *b;
+    }
+    return extended;
+}
+
+// return the max length of two vectors. Utility function used in
+// bitwise binary operations on byte strings
+fn max_len(a: &Vec<u8>, b: &Vec<u8>) -> usize {
+    let asize = a.len();
+    let bsize = b.len();
+    return if asize < bsize { bsize } else { asize };
+}
+
 pub fn bin_and(a: &Val, b: &Val) -> Result<Val, InkErr> {
     let result = match a {
         Val::Number(num_a) => match b {
             Val::Number(num_b) => Val::Number((*num_a as i64 & *num_b as i64) as f64),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        Val::Str(str_a) => match b {
+            Val::Str(str_b) => {
+                let max = max_len(str_a, str_b);
+
+                let a = zero_extend(str_a, max);
+                let b = zero_extend(str_b, max);
+                let mut c: Vec<u8> = vec![0; max];
+
+                for i in 0..c.len() {
+                    c[i] = a[i] & b[i];
+                }
+                Val::Str(c)
+            }
             _ => return Err(InkErr::InvalidOperand),
         },
         Val::Bool(bool_a) => match b {
@@ -111,6 +144,21 @@ pub fn bin_or(a: &Val, b: &Val) -> Result<Val, InkErr> {
             Val::Number(num_b) => Val::Number((*num_a as i64 | *num_b as i64) as f64),
             _ => return Err(InkErr::InvalidOperand),
         },
+        Val::Str(str_a) => match b {
+            Val::Str(str_b) => {
+                let max = max_len(str_a, str_b);
+
+                let a = zero_extend(str_a, max);
+                let b = zero_extend(str_b, max);
+                let mut c: Vec<u8> = vec![0; max];
+
+                for i in 0..c.len() {
+                    c[i] = a[i] | b[i];
+                }
+                Val::Str(c)
+            }
+            _ => return Err(InkErr::InvalidOperand),
+        },
         Val::Bool(bool_a) => match b {
             Val::Bool(bool_b) => return Ok(Val::Bool(*bool_a || *bool_b)),
             _ => return Err(InkErr::InvalidOperand),
@@ -125,6 +173,21 @@ pub fn bin_xor(a: &Val, b: &Val) -> Result<Val, InkErr> {
     let result = match a {
         Val::Number(num_a) => match b {
             Val::Number(num_b) => Val::Number((*num_a as i64 ^ *num_b as i64) as f64),
+            _ => return Err(InkErr::InvalidOperand),
+        },
+        Val::Str(str_a) => match b {
+            Val::Str(str_b) => {
+                let max = max_len(str_a, str_b);
+
+                let a = zero_extend(str_a, max);
+                let b = zero_extend(str_b, max);
+                let mut c: Vec<u8> = vec![0; max];
+
+                for i in 0..c.len() {
+                    c[i] = a[i] ^ b[i];
+                }
+                Val::Str(c)
+            }
             _ => return Err(InkErr::InvalidOperand),
         },
         Val::Bool(bool_a) => match b {

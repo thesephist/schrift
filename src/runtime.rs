@@ -1,6 +1,10 @@
 use std::io::{self, Write};
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::err::InkErr;
+use crate::comp::Comp;
 use crate::val::Val;
 
 pub fn neg(v: &Val) -> Result<Val, InkErr> {
@@ -299,4 +303,42 @@ pub fn builtin_len(args: Vec<Val>) -> Result<Val, InkErr> {
     };
 
     return Ok(Val::Number(length as f64));
+}
+
+pub fn builtin_load(args: Vec<Val>) -> Result<Val, InkErr> {
+    if args.len() < 1 {
+        return Err(InkErr::NotEnoughArguments);
+    }
+
+    let arg = &args[0];
+    return match &arg {
+        Val::Str(_path_str) => {
+            println!("loading {}", arg);
+            /*
+             * TODO: Ink load() builtin implementation design:
+             *
+             * 0. For deduplication of imports / recursive imports, create and keep a Map<Path,
+             *    Comp> per-VM. A VM represents a single execution thread, so all Context*
+             *    variables live there.
+             * 1. Against the same main `Block`, but different root `ScopeStack`, `generate_node`
+             *    the program from the file as an `ExprList`. This should result in two things: (a)
+             *    the bytecode from this new module gets compiled into the same `Vec<Block>` for
+             *    the VM to execute, and (b) we end up with a top-level lexical `Scope` that maps
+             *    global names (importable names) to registers where the live in the `ExprList`'s'
+             *    execution stack.
+             * 2. Eval the compiled `ExprList` blocks. This allocates into the globally named
+             *    registers in the global scope the right values.
+             * 3. Create a `Comp` where keys of the global `ScopeStack` scope map to values in the
+             *    corresponding registers. This is the map to be imported. Return this `Comp` from
+             *    load. Optionally (0), update the per-VM import map for future imports of the same
+             *    program file.
+             *
+             * In this design, a single VM contains all bytecode for all imported modules, but
+             * because jumps (Call instructions) can't cross these module boundaries if compiled
+             * correctly, this works efficiently.
+             */
+            Ok(Val::Comp(Rc::new(RefCell::new(Comp::new()))))
+        },
+        _ => Err(InkErr::InvalidArguments),
+    };
 }

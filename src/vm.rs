@@ -83,10 +83,7 @@ impl Vm {
     }
 
     fn is_running(&self) -> bool {
-        if self.stack.len() > 0 {
-            return true;
-        }
-        return false;
+        return self.stack.len() > 0;
     }
 
     fn should_pop_frame(&self) -> bool {
